@@ -1,6 +1,8 @@
 module Circulation
 
-export circulation
+import Base.Threads
+
+export circulation, circulation!
 
 include("loops/rectangle.jl")
 
@@ -9,22 +11,68 @@ const ComplexArray{T,N} = AbstractArray{Complex{T},N} where {T<:Real,N}
 const RealArray{T,N} = AbstractArray{T,N} where {T<:Real,N}
 
 """
+    circulation!(Γ, vf, rs, ks)
+
+Compute circulation on a 2D slice around loops with a fixed rectangle shape.
+
+## Parameters
+
+- `Γ`: output real matrix containing the circulation associated to each point of
+  the physical grid.
+
+- `vf = (vf_x, vf_y)`: two-component 2D vector field of complex values.
+  The `i`-th component must have been Fourier-transformed along the `i`-th
+  direction. They should be generated using a real-to-complex transform (e.g.
+  `FFTW.rfft`).
+
+- `rs = (r_x, r_y)`: rectangle dimensions.
+
+- `ks = (k_x, k_y)`: non-negative Fourier wave numbers.
+  They are typically generated using `rfftfreq` (from `FFTW` package).
+
+"""
+function circulation!(Γ::AbstractMatrix{<:Real},
+                      vf::NTuple{2,ComplexArray},
+                      rs::NTuple{2,Int},
+                      ks::NTuple{2,AbstractVector},
+                     )
+    Ns = size(Γ)
+    Nv_expected = div.(Ns, 2) .+ 1
+
+    if length.(ks) != Nv_expected
+        @show Ns
+        @show Nv_expected
+        @show size.(ks)
+        throw(ArgumentError(
+            "incompatible sizes of output array and wave numbers"
+        ))
+    end
+
+    Nx, Ny = Ns
+    loop_base = Rectangle((0, 0), rs)
+    rs_half = rs .>> 1  # half radius (truncated if rs has odd numbers...)
+
+    Threads.@threads for j = 1:Ny
+        for i = 1:Nx
+            x0 = (i, j) .- rs_half  # lower left corner of loop
+            loop = loop_base + x0
+            Γ[i, j] = circulation(loop, vf, ks, Ns)
+        end
+    end
+
+    Γ
+end
+
+"""
     circulation(loop::Rectangle, vf, ks, Ns)
 
-Compute circulation around the given loop in a 2D (sub)space.
+Compute circulation around the given loop on a 2D slice.
 
 The rectangle must be given in integer coordinates (grid indices).
 
-The velocity `vf = (vf_x, vf_y)` must be a two-component 2D vector field of
-complex values.
-The `i`-th component must have been Fourier-transformed along the `i`-th
-direction.
-
-The non-negative Fourier wave numbers must be given as a tuple of vectors `ks =
-(k_x, k_y)`. They are typically constructed using `rfftfreq` (from `FFTW`
-package).
-
 The tuple `Ns = (Nx, Ny)` must contain the dimensions of the original real data.
+
+See also `circulation!`.
 
 """
 function circulation(loop::Rectangle{Int},
@@ -43,8 +91,8 @@ function circulation(loop::Rectangle{Int},
     ib, jb = loop.x .+ loop.r
 
     # Coordinates of rectangle corners, taking periodicity into account.
-    xa, ya = _make_coordinate.(xs, (ia, ja))
-    xb, yb = _make_coordinate.(xs, (ib, jb))
+    (ia, xa), (ja, ya) = _make_coordinate.(xs, (ia, ja))
+    (ib, xb), (jb, yb) = _make_coordinate.(xs, (ib, jb))
 
     # Array views along each line.
     vx_a = @view vf[1][:, ja]
@@ -83,7 +131,7 @@ function _make_coordinate(x::AbstractVector, i::Int)
         i -= N
         x0 += L
     end
-    x0 + x[i]
+    i, x0 + x[i]
 end
 
 """

@@ -29,7 +29,6 @@ get_coordinates(g::ParamsGP) = map(g.dims, g.L) do N, L
 end
 
 get_wavenumbers(g::ParamsGP) = map(g.dims, g.L) do N, L
-    # TODO verify that this works for L != 2pi
     sampling_freq = 2pi * N / L  # = 2π / Δx
     fftfreq(N, sampling_freq)
 end

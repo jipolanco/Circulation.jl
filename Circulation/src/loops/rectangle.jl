@@ -39,7 +39,9 @@ function get_corners(loop::Rectangle)
     p0, p1, p2, p3
 end
 
+get_centre(loop::Rectangle) = loop.x .+ loop.r ./ 2
+
 function Base.show(io::IO, loop::Rectangle)
-    xc = loop.x .+ loop.r ./ 2
+    xc = get_centre(loop)
     print(io, "Rectangle of size ", loop.r, " centred at ", xc)
 end
