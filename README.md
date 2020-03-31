@@ -13,9 +13,14 @@ To install the required packages, run the following from the command line:
 julia --project -e "using Pkg; Pkg.instantiate()"
 ```
 
-Then, to run the script:
+## Running scripts
+
+The `scripts/circulation.jl` script loads parameters from a TOML file.
+An example of parameter file is `examples/four_vortices.toml`.
+
+To run the script with the example parameter file:
 
 ```bash
 export JULIA_NUM_THREADS=4  # optional, to use threads
-julia --project circulation.jl
+julia --project scripts/circulation.jl -p examples/four_vortices.toml
 ```

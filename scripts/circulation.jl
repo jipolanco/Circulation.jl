@@ -3,29 +3,57 @@
 using GPFields
 using Circulation
 
+using ArgParse
 using FFTW
-using InteractiveUtils
+import TOML
 
 import Base.Threads
+
+function parse_commandline()
+    s = ArgParseSettings()
+    @add_arg_table! s begin
+        "--parameter-file", "-p"
+            help = "path to TOML parameter file"
+            arg_type = String
+            default = "circulation.toml"
+    end
+    parse_args(s)
+end
+
+function load_params(filename)
+    if !isfile(filename)
+        error("parameter file not found: $filename")
+    end
+    @info "Loading parameters from $filename"
+    TOML.parsefile(filename)
+end
+
+const PARAMS = load_params(parse_commandline()["parameter-file"])
+
+# Input data parameters
+const DATA_DIR_BASE = expanduser(PARAMS["fields"]["data_directory"])
+const DATA_IDX = PARAMS["fields"]["data_index"]
+const RESOLUTION = tuple(PARAMS["fields"]["N"]...)
+
+const GP_PARAMS = ParamsGP(
+    RESOLUTION,  # resolution (can be 2D or 3D)
+    c = PARAMS["physics"]["c"],
+    nxi = PARAMS["physics"]["nxi"],
+)
+
+const SLICE_3D = let ints = PARAMS["circulation"]["slice_3d"] :: Vector{Int}
+    # Replace zeroes by colons, and convert array to tuple.
+    t = tuple(replace(ints, 0 => :)...)
+    @assert length(t) == 3
+    t
+end
+
+const VELOCITY_EPS = PARAMS["circulation"]["epsilon_velocity"]
 
 @info "Using $(Threads.nthreads()) threads"
 if Threads.nthreads() == 1
     @info "Set the JULIA_NUM_THREADS environment variable to change this."
 end
-
-# Input data parameters
-const DATA_DIR_BASE = expanduser("~/Dropbox/circulation/data/4vortices")
-const DATA_IDX = 1
-
-const GP_PARAMS = ParamsGP(
-    (256, 256),  # resolution (can be 2D or 3D)
-    c = 1.0,
-    nxi = 1.5,
-)
-
-const SLICE_3D = (:, :, 1)  # slice of a 3D dataset
-
-const VELOCITY_EPS = 1e-10
 
 function read_psi(params::ParamsGP, dir_base, resolution, idx)
     datadir = joinpath(dir_base, string(resolution))
