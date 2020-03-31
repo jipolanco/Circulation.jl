@@ -3,7 +3,6 @@
 Computation of circulation from GP data.
 
 Most of the code is in the two local modules `GPFields` and `Circulation`.
-A script `circulation.jl` is provided as an example.
 
 ## Setup
 
@@ -15,8 +14,8 @@ julia --project -e "using Pkg; Pkg.instantiate()"
 
 ## Running scripts
 
-The `scripts/circulation.jl` script loads parameters from a TOML file.
-An example of parameter file is `examples/four_vortices.toml`.
+The [`circulation.jl`](scripts/circulation.jl) script loads parameters from a TOML file.
+As an example, see [`four_vortices.toml`](examples/four_vortices.toml).
 
 To run the script with the example parameter file:
 
