@@ -20,7 +20,7 @@ function parse_commandline()
     parse_args(s)
 end
 
-function load_params(filename)
+function params_from_file(filename)
     if !isfile(filename)
         error("parameter file not found: $filename")
     end
@@ -28,27 +28,34 @@ function load_params(filename)
     TOML.parsefile(filename)
 end
 
-const PARAMS = load_params(parse_commandline()["parameter-file"])
-
-# Input data parameters
-const DATA_DIR_BASE = expanduser(PARAMS["fields"]["data_directory"])
-const DATA_IDX = PARAMS["fields"]["data_index"]
-const RESOLUTION = tuple(PARAMS["fields"]["N"]...)
-
-const GP_PARAMS = ParamsGP(
-    RESOLUTION,  # resolution (can be 2D or 3D)
-    c = PARAMS["physics"]["c"],
-    nxi = PARAMS["physics"]["nxi"],
-)
-
-const SLICE_3D = let ints = PARAMS["circulation"]["slice_3d"] :: Vector{Int}
-    # Replace zeroes by colons, and convert array to tuple.
-    t = tuple(replace(ints, 0 => :)...)
-    @assert length(t) == 3
-    t
+function parse_params_fields(d::Dict)
+    dims = d["N"] :: Vector{Int}
+    if length(dims) ∉ (2, 3)
+        error("`N` parameter must be a vector of 2 or 3 integers")
+    end
+    (
+        data_dir = expanduser(d["data_directory"] :: String),
+        data_idx = d["data_index"] :: Int,
+        dims = tuple(dims...),
+    )
 end
 
-const VELOCITY_EPS = PARAMS["circulation"]["epsilon_velocity"]
+parse_params_physics(d::Dict) = (
+    c = d["c"] :: Float64,
+    nxi = d["nxi"] :: Float64,
+)
+
+function parse_params_circulation(d::Dict)
+    s = get(d, "slice_3d", [0, 0, 1]) :: Vector{Int}
+    if length(s) != 3
+        error("`slice_3d` parameter must be a vector of 3 integers")
+    end
+    t = tuple(replace(s, 0 => :)...)
+    (
+        eps_velocity = d["epsilon_velocity"] :: Float64,
+        slice_3d = t,
+    )
+end
 
 @info "Using $(Threads.nthreads()) threads"
 if Threads.nthreads() == 1
@@ -95,23 +102,30 @@ end
 prepare_slice(v::NTuple{2,AbstractArray{T,2}} where T, args...) =
     (rfft(v[1], 1), rfft(v[2], 2))
 
-generate_slice(::ParamsGP{2}) = (:, :)    # 2D case
-generate_slice(::ParamsGP{3}) = SLICE_3D  # 3D case
+generate_slice(::ParamsGP{2}, args...) = (:, :)     # 2D case
+generate_slice(::ParamsGP{3}, slice_3d) = slice_3d  # 3D case
 
-function main()
-    params = GP_PARAMS
-    slice = generate_slice(params)
+function main(fields, circulation, physics)
+    params = ParamsGP(
+        fields.dims,    # resolution: (Nx, Ny) or (Nx, Ny, Nz)
+        c = physics.c,
+        nxi = physics.nxi,
+    )
+
+    eps_vel = circulation.eps_velocity
+
+    slice = generate_slice(params, circulation.slice_3d)
     dims = slice_dims(slice) :: Tuple{Int,Int}
     @info "Using slice = $slice (dimensions: $dims)"
 
     # Load field from file
-    psi = read_psi(params, DATA_DIR_BASE, params.dims[1], DATA_IDX)
+    psi = read_psi(params, fields.data_dir, params.dims[1], fields.data_idx)
 
     # Compute different fields (can be 2D or 3D)
     rho = GPFields.compute_density(psi)
-    p = GPFields.compute_momentum(psi, params)     # = (px, py, [pz])
-    v = map(pp -> pp ./ (rho .+ VELOCITY_EPS), p)  # = (vx, vy, [vz])
-    vreg = map(pp -> pp ./ sqrt.(rho), p)          # regularised velocity
+    p = GPFields.compute_momentum(psi, params)  # = (px, py, [pz])
+    v = map(pp -> pp ./ (rho .+ eps_vel), p)    # = (vx, vy, [vz])
+    vreg = map(pp -> pp ./ sqrt.(rho), p)       # regularised velocity
 
     pf = prepare_slice(p, slice)
 
@@ -128,7 +142,19 @@ function main()
     rs = (8, 8)  # rectangle loop dimensions
 
     # Compute circulation over slice
-    circulation!(circ, pf, rs, ks)
+    circulation!(circ, pf, rs, ks)  # precompilation (for accurate timings)
+    @time circulation!(circ, pf, rs, ks)
+end
+
+function main()
+    args = parse_commandline()
+    p = params_from_file(args["parameter-file"])
+
+    fields = parse_params_fields(p["fields"])
+    circulation = parse_params_circulation(p["circulation"])
+    physics = parse_params_physics(p["physics"])
+
+    main(fields, circulation, physics)
 end
 
 main()
