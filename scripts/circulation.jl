@@ -4,7 +4,6 @@ using GPFields
 using Circulation
 
 using ArgParse
-using FFTW
 import Pkg.TOML
 
 import Base.Threads
@@ -82,7 +81,7 @@ slice_dims(t::Tuple) = slice_dims(t...)
 @assert slice_dims(:, 2) === (1, )
 @assert slice_dims(1, 2) === ()
 
-# Select slice and perform FFTs.
+# Select slice.
 # Case of 3D input data
 function prepare_slice(v::NTuple{3,AbstractArray{T,3}} where T,
                        slice=(:, :, 1))
@@ -95,12 +94,11 @@ function prepare_slice(v::NTuple{3,AbstractArray{T,3}} where T,
     vs = v[dims[1]], v[dims[2]]  # select the 2 relevant components
     vsub = view.(vs, slice...)
     @assert all(ndims.(vsub) .== 2) "Slices don't have dimension 2"
-    rfft(vsub[1], 1), rfft(vsub[2], 2)
+    vsub
 end
 
 # Case of 2D input data (the `slice` argument is ignored)
-prepare_slice(v::NTuple{2,AbstractArray{T,2}} where T, args...) =
-    (rfft(v[1], 1), rfft(v[2], 2))
+prepare_slice(v::NTuple{2,AbstractArray{T,2}} where T, args...) = v
 
 generate_slice(::ParamsGP{2}, args...) = (:, :)     # 2D case
 generate_slice(::ParamsGP{3}, slice_3d) = slice_3d  # 3D case
@@ -127,23 +125,22 @@ function main(fields, circulation, physics)
     v = map(pp -> pp ./ (rho .+ eps_vel), p)    # = (vx, vy, [vz])
     vreg = map(pp -> pp ./ sqrt.(rho), p)       # regularised velocity
 
-    pf = prepare_slice(p, slice)
+    i, j = dims
+    Ls = params.L[i], params.L[j]        # domain size in the slice dimensions
+    Ns = params.dims[i], params.dims[j]  # dimensions of slice (N1, N2)
+    p_slice = prepare_slice(p, slice)
 
-    # Build wave numbers and allocate circulation matrix
-    ks, circ = let (i, j) = dims
-        Ns = params.dims[i], params.dims[j]  # physical dimensions of slice (N1, N2)
-        Ls = params.L[i], params.L[j]        # physical lengths (L1, L2)
-        fs = 2pi .* Ns ./ Ls                 # FFT sampling frequency
-        ks = rfftfreq.(Ns, fs)               # non-negative wave numbers
-        circ = similar(rho, Ns...)           # circulation matrix
-        ks, circ
-    end
+    # Compute integral fields
+    Ip = IntegralField2D(p_slice[1], L=Ls)
+    prepare!(Ip, p_slice)
+
+    # Allocate circulation matrix
+    circ = similar(rho, Ns...)
 
     rs = (8, 8)  # rectangle loop dimensions
 
     # Compute circulation over slice
-    circulation!(circ, pf, rs, ks)  # precompilation (for accurate timings)
-    @time circulation!(circ, pf, rs, ks)
+    circulation!(circ, Ip, rs)
 end
 
 function main()

@@ -2,6 +2,11 @@ module Circulation
 
 import Base.Threads
 
+using FFTW
+using LinearAlgebra: ldiv!
+
+export IntegralField2D
+export prepare!
 export circulation, circulation!
 
 include("loops/rectangle.jl")
@@ -11,7 +16,111 @@ const ComplexArray{T,N} = AbstractArray{Complex{T},N} where {T<:Real,N}
 const RealArray{T,N} = AbstractArray{T,N} where {T<:Real,N}
 
 """
-    circulation!(Γ, vf, rs, ks)
+    IntegralField2D{T}
+
+Contains arrays required to compute the integral of a 2D vector field
+`(vx, vy)`.
+
+---
+
+    IntegralField2D(Nx, Ny, [T = Float64]; L)
+
+Allocate `IntegralField2D` of dimensions `(Nx, Ny)`.
+
+The domain size must be given as a tuple `L = (Lx, Ly)`.
+
+---
+
+    IntegralField2D(A::AbstractMatrix{<:AbstractFloat}; L)
+
+Allocate `IntegralField2D` having dimensions and type compatibles with input
+matrix.
+"""
+struct IntegralField2D{T}
+    N :: NTuple{2,Int}      # Nx, Ny
+    L :: NTuple{2,Float64}  # domain size: Lx, Ly
+
+    # Mean value Ux(y), Uy(x).
+    U :: NTuple{2,Vector{T}}  # lengths: Ny, Nx
+
+    # Integral fields wx(x, y), wy(x, y).
+    w :: NTuple{2,Matrix{T}}  # (Nx, Ny)
+
+    function IntegralField2D(Nx, Ny, ::Type{T} = Float64; L) where {T}
+        N = (Nx, Ny)
+        U = Vector{T}.(undef, N)
+        w = ntuple(_ -> Matrix{T}(undef, Nx, Ny), 2)
+        new{T}(N, L, U, w)
+    end
+
+    IntegralField2D(A::AbstractMatrix{T}; kwargs...) where {T<:AbstractFloat} =
+        IntegralField2D(size(A)..., T; kwargs...)
+end
+
+Base.ndims(::IntegralField2D) = 2
+Base.size(I::IntegralField2D) = I.N
+Base.eltype(::Type{IntegralField2D{T}}) where {T} = T
+
+"""
+    prepare!(I::IntegralField2D{T}, v, Ls)
+
+Set values of the integral fields from 2D vector field `v = (vx, vy)`.
+"""
+function prepare!(I::IntegralField2D{T},
+                  v::NTuple{2,AbstractMatrix{T}}) where {T}
+    Ns = size(I)
+    if any(Ref(Ns) .!= size.(v))
+        throw(ArgumentError("incompatible array sizes"))
+    end
+
+    # FFT plans: vx along dimension 1, vy along dimension 2
+    plans = plan_rfft.(v, (1, 2))
+
+    # Wave numbers
+    fs = 2pi .* Ns ./ I.L  # sampling frequency
+    ks = rfftfreq.(Ns, fs)
+
+    vf = plans .* v  # apply forward plans
+
+    Nx, Ny = Ns
+
+    # First velocity component
+    let U = I.U[1], w = vf[1], k = ks[1]
+        @assert k[1] == 0
+        Nk = length(k)
+        @assert size(w) == (Nk, Ny)
+        for j = 1:Ny
+            # Copy mean value and set it to zero
+            U[j] = w[1, j]
+            w[1, j] = 0
+            for i = 2:Nk
+                w[i, j] /= im * k[i]  # w(k) -> w(k) / ik
+            end
+        end
+    end
+
+    # Second velocity component
+    let U = I.U[2], w = vf[2], k = ks[2]
+        @assert k[1] == 0
+        Nk = length(k)
+        @assert size(w) == (Nx, Nk)
+        for i = 1:Nx
+            U[i] = w[i, 1]
+            w[i, 1] = 0
+            for j = 2:Nk
+                w[i, j] /= im * k[j]  # w(k) -> w(k) / ik
+            end
+        end
+    end
+
+    # Apply backwards transform and write it into I.w.
+    ldiv!.(I.w, plans, vf)
+
+    I
+end
+
+"""
+    circulation!(Γ::AbstractMatrix, I::IntegralField2D, rs)
 
 Compute circulation on a 2D slice around loops with a fixed rectangle shape.
 
@@ -20,35 +129,22 @@ Compute circulation on a 2D slice around loops with a fixed rectangle shape.
 - `Γ`: output real matrix containing the circulation associated to each point of
   the physical grid.
 
-- `vf = (vf_x, vf_y)`: two-component 2D vector field of complex values.
-  The `i`-th component must have been Fourier-transformed along the `i`-th
-  direction. They should be generated using a real-to-complex transform (e.g.
-  `FFTW.rfft`).
+- `I`: `IntegralField2D` containing integral information of 2D vector field.
 
 - `rs = (r_x, r_y)`: rectangle dimensions.
 
-- `ks = (k_x, k_y)`: non-negative Fourier wave numbers.
-  They are typically generated using `rfftfreq` (from `FFTW` package).
-
 """
 function circulation!(Γ::AbstractMatrix{<:Real},
-                      vf::NTuple{2,ComplexArray},
+                      I::IntegralField2D,
                       rs::NTuple{2,Int},
-                      ks::NTuple{2,AbstractVector},
                      )
-    Ns = size(Γ)
-    Nv_expected = div.(Ns, 2) .+ 1
+    Ns = size(I)
+    Nx, Ny = Ns
 
-    if length.(ks) != Nv_expected
-        @show Ns
-        @show Nv_expected
-        @show size.(ks)
-        throw(ArgumentError(
-            "incompatible sizes of output array and wave numbers"
-        ))
+    if size(Γ) != Ns
+        throw(ArgumentError("incompatible size of output array"))
     end
 
-    Nx, Ny = Ns
     loop_base = Rectangle((0, 0), rs)
     rs_half = rs .>> 1  # half radius (truncated if rs has odd numbers...)
 
@@ -56,7 +152,7 @@ function circulation!(Γ::AbstractMatrix{<:Real},
         for i = 1:Nx
             x0 = (i, j) .- rs_half  # lower left corner of loop
             loop = loop_base + x0
-            Γ[i, j] = circulation(loop, vf, ks, Ns)
+            Γ[i, j] = circulation(loop, I)
         end
     end
 
@@ -64,27 +160,17 @@ function circulation!(Γ::AbstractMatrix{<:Real},
 end
 
 """
-    circulation(loop::Rectangle, vf, ks, Ns)
+    circulation(loop::Rectangle, I::IntegralField2D)
 
 Compute circulation around the given loop on a 2D slice.
 
 The rectangle must be given in integer coordinates (grid indices).
 
-The tuple `Ns = (Nx, Ny)` must contain the dimensions of the original real data.
-
 See also `circulation!`.
-
 """
-function circulation(loop::Rectangle{Int},
-                     vf::NTuple{2,ComplexArray{T,2}} where {T},
-                     ks::NTuple{2,AbstractVector},
-                     Ns::NTuple{2,Int},
-                    )
-    # Determine domain size from first positive wave number.
-    Ls = 2pi ./ getindex.(ks, 2)  # (Lx, Ly)
-
+function circulation(loop::Rectangle{Int}, I::IntegralField2D)
     # Coordinates (including end point).
-    xs = LinRange.(0, Ls, Ns .+ 1)
+    xs = LinRange.(0, I.L, I.N .+ 1)
 
     # Indices of rectangle points.
     ia, ja = loop.x
@@ -94,27 +180,16 @@ function circulation(loop::Rectangle{Int},
     (ia, xa), (ja, ya) = _make_coordinate.(xs, (ia, ja))
     (ib, xb), (jb, yb) = _make_coordinate.(xs, (ib, jb))
 
-    # Array views along each line.
-    vx_a = @view vf[1][:, ja]
-    vx_b = @view vf[1][:, jb]
+    dx = xb - xa
+    dy = yb - ya
 
-    vy_a = @view vf[2][ia, :]
-    vy_b = @view vf[2][ib, :]
+    int_x_ya = I.U[1][ja] * dx + I.w[1][ib, ja] - I.w[1][ia, ja]
+    int_x_yb = I.U[1][jb] * dx + I.w[1][ib, jb] - I.w[1][ia, jb]
 
-    kx, ky = ks
-    Nx, Ny = Ns
+    int_y_xa = I.U[2][ia] * dy + I.w[2][ia, jb] - I.w[2][ia, ja]
+    int_y_xb = I.U[2][ib] * dy + I.w[2][ib, jb] - I.w[2][ib, ja]
 
-    Ix_a, Ix_b = integrate((vx_a, vx_b), kx, xa, xb)
-    Iy_a, Iy_b = integrate((vy_a, vy_b), ky, ya, yb)
-
-    int_x = (Ix_a - Ix_b) / Nx
-    int_y = (Iy_b - Iy_a) / Ny
-
-    # Slower version:
-    # int_x = (integrate(vx_a, kx, xa, xb) - integrate(vx_b, kx, xa, xb)) / Nx
-    # int_y = (integrate(vy_b, ky, ya, yb) - integrate(vy_a, ky, ya, yb)) / Ny
-
-    int_x + int_y
+    int_x_ya + int_y_xb - int_x_yb - int_y_xa
 end
 
 function _make_coordinate(x::AbstractVector, i::Int)
@@ -133,58 +208,5 @@ function _make_coordinate(x::AbstractVector, i::Int)
     end
     i, x0 + x[i]
 end
-
-"""
-    integrate(vf, k, x1, x2)
-
-Integrate Fourier-transformed vector `vf` between `x1` and `x2`.
-
-It is assumed that data was transformed using a real-to-complex FFT (`rfft`),
-and therefore only the positive wave numbers `k` are needed.
-
-Note that if the FFT was not normalised, then the result should be divided by
-the length of the *original real data* to get the actual integral.
-
-`vf` can also be a tuple of complex vectors (`vfA`, `vfB`, ...).
-In that case, the integral of each vector is returned.
-This can be useful for performance, since trigonometric functions will be computed just once for all vectors.
-"""
-function integrate(vf::Tuple{Vararg{AbstractVector{<:Complex}}},
-                   k::AbstractVector, x1, x2)
-    Nk = length(k)
-
-    all(length.(vf) .== Nk) || throw(ArgumentError("incompatible vector lengths"))
-    k[1] == 0 || throw(ArgumentError("first wave number should be zero"))
-    k[end] > 0 || throw(ArgumentError("negative wave numbers must not be passed"))
-
-    Δx = x2 - x1
-    int = @. real(getindex(vf, 1) * Δx)  # zero mode
-
-    # Sum over k != 0
-    @inbounds for n = 2:Nk
-        # Because of Hermitian symmetry, the real parts for k and -k are equal,
-        # so we multiply stuff by two. The imaginary parts have opposite sign
-        # and cancel out.
-        kn = k[n]
-
-        # Original version (may need modifications to work...).
-        # α = im * kn
-        # vn = getindex.(vf, n)
-        # int += 2 * real(vn / α * (exp(α * x2) - exp(α * x1)))
-
-        # Optimised version, avoiding computation of imaginary part.
-        vn = getindex.(vf, n)
-        kx1 = kn * x1
-        kx2 = kn * x2
-        sx = sin(kx2) - sin(kx1)
-        cx = cos(kx2) - cos(kx1)
-        int = @. int + (2 / kn) * (real(vn) * sx + imag(vn) * cx)
-    end
-
-    int
-end
-
-# If a vector is passed instead of a tuple of vectors...
-integrate(vf::AbstractVector, args...) = first(integrate((vf, ), args...))
 
 end
