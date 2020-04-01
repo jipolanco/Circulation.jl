@@ -5,7 +5,7 @@ using Circulation
 
 using ArgParse
 using FFTW
-import TOML
+import Pkg.TOML
 
 import Base.Threads
 
