@@ -4,14 +4,26 @@ data_index = 1
 N = [256, 256]  # resolution: can be 2D or 3D
 # N = [256, 256, 1]
 
-[circulation]
-epsilon_velocity = 1e-10  # for "correcting" velocity near vortices
+[physics]
+c = 1.0
+nxi = 1.5
 
+[circulation]
+# For "correcting" velocity near vortices (0 for no correction).
+# epsilon_velocity = 1e-10
+epsilon_velocity = 0
+
+# List of integer loop sizes.
+# The three following examples are accepted.
+# loop_sizes = 4                   # a. single loop size
+# loop_sizes = "2:2:10"            # b. range of sizes
+loop_sizes = [1, 2, 4, 8, 16]      # c. list of sizes
+
+# TODO remove?
 # 2D slice of 3D dataset to be studied.
 # Zeroes are transformed to ":" in Julia. There should be exactly two of them.
 # Only used if input dataset is 3D (i.e. if fields.N has length 3).
 slice_3d = [0, 0, 1]
 
-[physics]
-c = 1.0
-nxi = 1.5
+[output]
+directory = "./output"

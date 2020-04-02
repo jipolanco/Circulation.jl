@@ -17,7 +17,15 @@ function check_size(psi, io_r, io_c)
     size_i = stat(io_c).size
     size_r == size_i || error("files have different sizes")
     if sizeof(psi) != size_r + size_i
-        error("dimensions of `psi` are inconsistent with file sizes")
+        T = eltype(psi)
+        sr = size_r ÷ sizeof(T)
+        error(
+            """
+            dimensions of `psi` are inconsistent with file sizes
+                array length:        $(length(psi))
+                expected from files: $sr
+            """
+        )
     end
     nothing
 end

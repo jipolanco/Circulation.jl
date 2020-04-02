@@ -5,6 +5,7 @@ using Circulation
 
 using ArgParse
 import Pkg.TOML
+using LinearAlgebra: norm
 
 import Base.Threads
 
@@ -40,8 +41,8 @@ function parse_params_fields(d::Dict)
 end
 
 parse_params_physics(d::Dict) = (
-    c = d["c"] :: Float64,
-    nxi = d["nxi"] :: Float64,
+    c = Float64(d["c"]),
+    nxi = Float64(d["nxi"]),
 )
 
 function parse_params_circulation(d::Dict)
@@ -51,21 +52,24 @@ function parse_params_circulation(d::Dict)
     end
     t = tuple(replace(s, 0 => :)...)
     (
-        eps_velocity = d["epsilon_velocity"] :: Float64,
+        eps_velocity = d["epsilon_velocity"] :: Real,
+        loop_sizes = parse_loop_sizes(d["loop_sizes"]),
         slice_3d = t,
     )
 end
 
-@info "Using $(Threads.nthreads()) threads"
-if Threads.nthreads() == 1
-    @info "Set the JULIA_NUM_THREADS environment variable to change this."
-end
+parse_loop_sizes(s::Vector{Int}) = s
+parse_loop_sizes(s::Int) = s
 
-function read_psi(params::ParamsGP, dir_base, resolution, idx)
-    datadir = joinpath(dir_base, string(resolution))
-    ψ = GPFields.load_psi(params, datadir, idx)
-    @info "Loaded $(summary(ψ)) from $datadir"
-    ψ
+function parse_loop_sizes(s::String)
+    try
+        # We assume the format "start:step:stop".
+        sp = split(s, ':', limit=3)
+        a, b, c = parse.(Int, sp)
+        a:b:c
+    catch e
+        error("cannot parse range from string '$s'")
+    end
 end
 
 # Determine dimensions along which a slice is performed.
@@ -103,21 +107,25 @@ prepare_slice(v::NTuple{2,AbstractArray{T,2}} where T, args...) = v
 generate_slice(::ParamsGP{2}, args...) = (:, :)     # 2D case
 generate_slice(::ParamsGP{3}, slice_3d) = slice_3d  # 3D case
 
-function main(fields, circulation, physics)
+function main(P::NamedTuple)
     params = ParamsGP(
-        fields.dims,    # resolution: (Nx, Ny) or (Nx, Ny, Nz)
-        c = physics.c,
-        nxi = physics.nxi,
+        P.fields.dims,    # resolution: (Nx, Ny) or (Nx, Ny, Nz)
+        c = P.physics.c,
+        nxi = P.physics.nxi,
     )
 
-    eps_vel = circulation.eps_velocity
+    eps_vel = P.circulation.eps_velocity
 
-    slice = generate_slice(params, circulation.slice_3d)
+    slice = generate_slice(params, P.circulation.slice_3d)
     dims = slice_dims(slice) :: Tuple{Int,Int}
     @info "Using slice = $slice (dimensions: $dims)"
 
     # Load field from file
-    psi = read_psi(params, fields.data_dir, params.dims[1], fields.data_idx)
+    psi = Array{ComplexF64}(undef, params.dims...)
+    let N = params.dims[1]
+        dir = joinpath(P.fields.data_dir, string(N))
+        GPFields.load_psi!(psi, dir, P.fields.data_idx)
+    end
 
     # Compute different fields (can be 2D or 3D)
     rho = GPFields.compute_density(psi)
@@ -128,30 +136,43 @@ function main(fields, circulation, physics)
     i, j = dims
     Ls = params.L[i], params.L[j]        # domain size in the slice dimensions
     Ns = params.dims[i], params.dims[j]  # dimensions of slice (N1, N2)
-    p_slice = prepare_slice(p, slice)
+    p_slice = prepare_slice(vreg, slice)
 
     # Compute integral fields
     Ip = IntegralField2D(p_slice[1], L=Ls)
     prepare!(Ip, p_slice)
 
-    # Allocate circulation matrix
-    circ = similar(rho, Ns...)
+    # Allocate circulation matrix (one per thread)
+    circ = [similar(rho, Ns...) for n = 1:Threads.nthreads()]
 
-    rs = (8, 8)  # rectangle loop dimensions
+    loop_sizes = P.circulation.loop_sizes
+    @info "Loop sizes: $loop_sizes"
 
-    # Compute circulation over slice
-    circulation!(circ, Ip, rs)
+    Threads.@threads for r in loop_sizes
+        # Compute circulation over slice
+        Γ = circ[Threads.threadid()]
+        @time circulation!(Γ, Ip, (r, r))
+    end
+
+    @show norm(circ[1])
 end
 
 function main()
+    @info "Using $(Threads.nthreads()) threads"
+    if Threads.nthreads() == 1
+        @info "Set the JULIA_NUM_THREADS environment variable to change this."
+    end
+
     args = parse_commandline()
     p = params_from_file(args["parameter-file"])
 
-    fields = parse_params_fields(p["fields"])
-    circulation = parse_params_circulation(p["circulation"])
-    physics = parse_params_physics(p["physics"])
+    params = (
+        fields = parse_params_fields(p["fields"]),
+        circulation = parse_params_circulation(p["circulation"]),
+        physics = parse_params_physics(p["physics"]),
+    )
 
-    main(fields, circulation, physics)
+    main(params)
 end
 
 main()

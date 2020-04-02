@@ -1,7 +1,5 @@
 module Circulation
 
-import Base.Threads
-
 using FFTW
 using LinearAlgebra: mul!, ldiv!
 
@@ -70,7 +68,7 @@ function prepare!(I::IntegralField2D{T},
                   v::NTuple{2,AbstractMatrix{T}}) where {T}
     Ns = size(I)
     if any(Ref(Ns) .!= size.(v))
-        throw(ArgumentError("incompatible array sizes"))
+        throw(DimensionMismatch("incompatible array sizes"))
     end
 
     # Wave numbers
@@ -152,24 +150,21 @@ Compute circulation on a 2D slice around loops with a fixed rectangle shape.
 """
 function circulation!(Γ::AbstractMatrix{<:Real},
                       I::IntegralField2D,
-                      rs::NTuple{2,Int},
-                     )
+                      rs::NTuple{2,Int})
     Ns = size(I)
     Nx, Ny = Ns
 
     if size(Γ) != Ns
-        throw(ArgumentError("incompatible size of output array"))
+        throw(DimensionMismatch("incompatible size of output array"))
     end
 
     loop_base = Rectangle((0, 0), rs)
     rs_half = rs .>> 1  # half radius (truncated if rs has odd numbers...)
 
-    Threads.@threads for j = 1:Ny
-        for i = 1:Nx
-            x0 = (i, j) .- rs_half  # lower left corner of loop
-            loop = loop_base + x0
-            Γ[i, j] = circulation(loop, I)
-        end
+    for j = 1:Ny, i = 1:Nx
+        x0 = (i, j) .- rs_half  # lower left corner of loop
+        loop = loop_base + x0
+        @inbounds Γ[i, j] = circulation(loop, I)
     end
 
     Γ
