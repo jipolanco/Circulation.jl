@@ -90,8 +90,9 @@ function prepare!(I::IntegralField2D{T},
         Nk = length(k)
         @assert size(w) == (Nk, Ny)
         for j = 1:Ny
-            # Copy mean value and set it to zero
-            U[j] = w[1, j]
+            # Copy mean value and then set it to zero.
+            # Note: the mean value must be normalised by the input data length.
+            U[j] = Real(w[1, j]) / Nx
             w[1, j] = 0
             for i = 2:Nk
                 w[i, j] /= im * k[i]  # w(k) -> w(k) / ik
@@ -105,7 +106,7 @@ function prepare!(I::IntegralField2D{T},
         Nk = length(k)
         @assert size(w) == (Nx, Nk)
         for i = 1:Nx
-            U[i] = w[i, 1]
+            U[i] = Real(w[i, 1]) / Ny
             w[i, 1] = 0
             for j = 2:Nk
                 w[i, j] /= im * k[j]  # w(k) -> w(k) / ik
