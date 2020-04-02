@@ -3,7 +3,7 @@ module Circulation
 import Base.Threads
 
 using FFTW
-using LinearAlgebra: ldiv!
+using LinearAlgebra: mul!, ldiv!
 
 export IntegralField2D
 export prepare!
@@ -73,49 +73,64 @@ function prepare!(I::IntegralField2D{T},
         throw(ArgumentError("incompatible array sizes"))
     end
 
-    # FFT plans: vx along dimension 1, vy along dimension 2
-    plans = plan_rfft.(v, (1, 2))
-
     # Wave numbers
     fs = 2pi .* Ns ./ I.L  # sampling frequency
     ks = rfftfreq.(Ns, fs)
 
-    vf = plans .* v  # apply forward plans
-
     Nx, Ny = Ns
 
     # First velocity component
-    let U = I.U[1], w = vf[1], k = ks[1]
+    let U = I.U[1], u = v[1], k = ks[1]
         @assert k[1] == 0
         Nk = length(k)
-        @assert size(w) == (Nk, Ny)
+
+        plan = plan_rfft(view(u, :, 1))
+        uf = Array{Complex{T}}(undef, Nk)
+
         for j = 1:Ny
+            mul!(uf, plan, view(u, :, j))  # apply FFT
+
             # Copy mean value and then set it to zero.
             # Note: the mean value must be normalised by the input data length.
-            U[j] = Real(w[1, j]) / Nx
-            w[1, j] = 0
+            U[j] = Real(uf[1]) / Nx
+            uf[1] = 0
+
             for i = 2:Nk
-                w[i, j] /= im * k[i]  # w(k) -> w(k) / ik
+                uf[i] /= im * k[i]  # w(k) -> w(k) / ik
             end
+
+            wj = @view I.w[1][:, j]
+            ldiv!(wj, plan, uf)  # apply inverse FFT
         end
     end
 
     # Second velocity component
-    let U = I.U[2], w = vf[2], k = ks[2]
+    let U = I.U[2], u = v[2], k = ks[2]
         @assert k[1] == 0
         Nk = length(k)
-        @assert size(w) == (Nx, Nk)
+
+        # In this case, we copy data from/to a contiguous buffer `ubuf`.
+        # This is needed to make FFT plans work.
+        uf = Array{Complex{T}}(undef, Nk)
+        ubuf = Array{T}(undef, Ny)
+        plan = plan_rfft(ubuf)
+
         for i = 1:Nx
-            U[i] = Real(w[i, 1]) / Ny
-            w[i, 1] = 0
+            copyto!(ubuf, view(u, i, :))
+            mul!(uf, plan, ubuf)
+
+            U[i] = Real(uf[1]) / Ny
+            uf[1] = 0
+
             for j = 2:Nk
-                w[i, j] /= im * k[j]  # w(k) -> w(k) / ik
+                uf[j] /= im * k[j]  # w(k) -> w(k) / ik
             end
+
+            wi = @view I.w[2][i, :]
+            ldiv!(ubuf, plan, uf)  # apply inverse FFT
+            copyto!(wi, ubuf)
         end
     end
-
-    # Apply backwards transform and write it into I.w.
-    ldiv!.(I.w, plans, vf)
 
     I
 end
