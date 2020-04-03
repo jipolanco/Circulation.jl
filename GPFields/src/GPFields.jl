@@ -5,24 +5,29 @@ export get_coordinates
 
 using FFTW
 using Printf: @sprintf
-
-include("params.jl")
+import Mmap
 
 # Type definitions
 const ComplexArray{T,N} = AbstractArray{Complex{T},N} where {T<:Real,N}
 const RealArray{T,N} = AbstractArray{T,N} where {T<:Real,N}
 
-function check_size(psi, io_r, io_c)
+# Defines a slice in N dimensions.
+const Slice{N} = Tuple{Vararg{Union{Int,Colon}, N}} where {N}
+
+include("slices.jl")
+include("params.jl")
+
+function check_size(::Type{T}, dims, io_r, io_c) where {T <: Complex}
     size_r = stat(io_r).size
     size_i = stat(io_c).size
     size_r == size_i || error("files have different sizes")
-    if sizeof(psi) != size_r + size_i
-        T = eltype(psi)
+    N = prod(dims)
+    if sizeof(T) * N != size_r + size_i
         sr = size_r ÷ sizeof(T)
         error(
             """
-            dimensions of `psi` are inconsistent with file sizes
-                array length:        $(length(psi))
+            given GP dimensions are inconsistent with file sizes
+                given dimensions:    $N  $dims
                 expected from files: $sr
             """
         )
@@ -30,29 +35,47 @@ function check_size(psi, io_r, io_c)
     nothing
 end
 
-function load_psi!(psi::ComplexArray{T}, io_r::IO, io_c::IO) where {T}
-    check_size(psi, io_r, io_c)
-    N = length(psi)  # number of points
-
-    for n = 1:N
-        x = read(io_r, T)
-        y = read(io_c, T)
-        psi[n] = Complex(x, y)
+# Read the full data
+function load_psi!(psi::ComplexArray{T}, vr::RealArray{T}, vi::RealArray{T},
+                   slice::Nothing) where {T}
+    @assert length(psi) == length(vr) == length(vi)
+    for n in eachindex(psi)
+        psi[n] = Complex{T}(vr[n], vi[n])
     end
+    psi
+end
 
+# Read a data slice
+function load_psi!(psi::ComplexArray{T}, vr::RealArray{T}, vi::RealArray{T},
+                   slice::Slice) where {T}
+    inds = view(CartesianIndices(vr), slice...)
+    @assert size(vr) == size(vi)
+    if size(psi) != size(inds)
+        throw(DimensionMismatch(
+            "output array has different dimensions from slice: " *
+            "$(size(psi)) ≠ $(size(inds))"
+        ))
+    end
+    for (n, I) in enumerate(inds)
+        psi[n] = Complex{T}(vr[I], vi[I])
+    end
     psi
 end
 
 """
-    load_psi!(psi, datadir, timestep)
+    load_psi!(psi, gp::ParamsGP, datadir, field_index; slice=nothing)
 
 Load complex ψ(x) field from files for `ψ_r` and `ψ_c`.
 
 Writes data to preallocated output `psi`.
+
+The optional `slice` parameter may designate a slice of the domain,
+such as `(:, 42, :)`.
 """
-function load_psi!(psi::ComplexArray, datadir::AbstractString,
-                   timestep::Integer)
-    ts = @sprintf "%03d" timestep  # e.g. "007" if timestep = 7
+function load_psi!(psi::ComplexArray{T}, gp::ParamsGP{N},
+                   datadir::AbstractString, field_index::Integer;
+                   slice::Union{Nothing,Slice{N}} = nothing) where {T,N}
+    ts = @sprintf "%03d" field_index  # e.g. "007" if field_index = 7
 
     fname_r = joinpath(datadir, "ReaPsi.$ts.dat")
     fname_i = joinpath(datadir, "ImaPsi.$ts.dat")
@@ -61,25 +84,28 @@ function load_psi!(psi::ComplexArray, datadir::AbstractString,
         isfile(fname) || error("file not found: $fname")
     end
 
-    open(fname_r, "r") do io_r
-        open(fname_i, "r") do io_i
-            load_psi!(psi, io_r, io_i)
-        end
-    end
+    check_size(Complex{T}, gp.dims, fname_r, fname_i)
+
+    # Memory-map data from file.
+    # That is, data is not loaded into memory until needed.
+    vr = Mmap.mmap(fname_r, Array{T,N}, gp.dims)
+    vi = Mmap.mmap(fname_i, Array{T,N}, gp.dims)
+
+    load_psi!(psi, vr, vi, slice)
 
     psi
 end
 
 """
-    load_psi(gp::ParamsGP, datadir, timestep)
+    load_psi(gp::ParamsGP, datadir, field_index)
 
-Load complex ψ(x) field from files for `ψ_r` and `ψ_c`.
+Load full complex ψ(x) field from files for `ψ_r` and `ψ_c`.
 
 Allocates output `psi`.
 """
 function load_psi(gp::ParamsGP, args...)
     psi = Array{ComplexF64}(undef, gp.dims...)
-    load_psi!(psi, args...) :: ComplexArray
+    load_psi!(psi, gp, args...) :: ComplexArray
 end
 
 """
