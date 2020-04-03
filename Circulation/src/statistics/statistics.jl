@@ -1,6 +1,13 @@
 include("moments.jl")
 include("histogram.jl")
 
+module CirculationFields
+# Different vector fields from which a circulation can be computed.
+@enum VelocityLikeField Velocity RegVelocity Momentum
+end
+
+using .CirculationFields
+
 """
     CirculationStats{T}
 
@@ -31,6 +38,12 @@ function CirculationStats(
     CirculationStats(Nr, loop_sizes, M, H)
 end
 
+# Dictionary of statistics.
+# Useful for defining circulation statistics related to quantities such as
+# velocity, regularised velocity and momentum.
+const StatsDict = Dict{CirculationFields.VelocityLikeField,
+                       <:CirculationStats}
+
 """
     update!(stats::CirculationStats, Γ, r_ind; to=TimerOutput())
 
@@ -58,6 +71,8 @@ function finalise!(stats::CirculationStats)
     stats
 end
 
+finalise!(stats::StatsDict) = finalise!.(values(stats))
+
 struct ParamsDataFile
     directory :: String
     index     :: Int
@@ -70,12 +85,16 @@ struct ParamsDataFile
 end
 
 """
-    analyse!(stats::CirculationStats, gp::ParamsGP, data_dir_base;
+    analyse!(stats::Dict{Symbol,CirculationStats},
+             gp::ParamsGP, data_dir_base;
              data_idx=0, eps_vel=0, to=TimerOutput())
 
 Compute circulation statistics from all possible slices of a GP field.
+
+The `stats` dictionary must contain one `CirculationStats` per quantity of
+interest. Each quantity has associated
 """
-function analyse!(stats::CirculationStats, gp::ParamsGP,
+function analyse!(stats::StatsDict, gp::ParamsGP,
                   data_dir_base::AbstractString;
                   data_idx=1, kwargs...)
     Ns = gp.dims
@@ -83,7 +102,7 @@ function analyse!(stats::CirculationStats, gp::ParamsGP,
     analyse!(stats, gp, data_params; kwargs...)
 end
 
-function analyse!(stats::CirculationStats, gp::ParamsGP,
+function analyse!(stats::StatsDict, gp::ParamsGP,
                   data_params::ParamsDataFile; to=TimerOutput(), kwargs...)
     orientations = slice_orientations(gp)
     for or in orientations
@@ -93,7 +112,7 @@ function analyse!(stats::CirculationStats, gp::ParamsGP,
     finalise!(stats)
 end
 
-function analyse!(stats::CirculationStats, orientation::Val, gp::ParamsGP{D},
+function analyse!(stats::StatsDict, orientation::Val, gp::ParamsGP{D},
                   data_params::ParamsDataFile;
                   eps_vel=0, to=TimerOutput()) where {D}
     Nslices = num_slices(gp.dims, orientation)
@@ -105,18 +124,25 @@ function analyse!(stats::CirculationStats, orientation::Val, gp::ParamsGP{D},
     Ni, Nj = gp.dims[i], gp.dims[j]
     Li, Lj = gp.L[i], gp.L[j]
 
+    # Determine which statistics to compute.
+    stats_keys = keys(stats)
+    with_v = CirculationFields.Velocity in stats_keys
+    with_vreg = CirculationFields.RegVelocity in stats_keys
+    with_p = CirculationFields.Momentum in stats_keys
+
     # Allocate arrays.
     psi = Array{ComplexF64}(undef, Ni, Nj)
     psi_buf = similar(psi)     # buffer for computation of momentum
     ρ = similar(psi, Float64)  # density
     Γ = similar(ρ)             # circulation
-    vs = ntuple(_ -> similar(ρ), 2)  # velocity / momentum
+    ps = ntuple(_ -> similar(ρ), 2)  # momentum
+
+    if with_v || with_vreg
+        vs = similar.(ps)  # velocity
+    end
 
     # Allocate integral field for circulation using FFTs.
-    Ip = IntegralField2D(vs[1], L=(Li, Lj))
-
-    # TODO
-    # - circulation for vreg and v
+    Ip = IntegralField2D(ps[1], L=(Li, Lj))
 
     for s = 1:Nslices
         # Load ψ at selected slice.
@@ -132,15 +158,33 @@ function analyse!(stats::CirculationStats, orientation::Val, gp::ParamsGP{D},
         gp_slice = ParamsGP(gp, slice)
 
         @timeit to "compute_momentum!" GPFields.compute_momentum!(
-            vs, psi, gp_slice, buf=psi_buf)
+            ps, psi, gp_slice, buf=psi_buf)
 
-        # Set integral values with momentum data.
-        @timeit to "prepare!" prepare!(Ip, vs)
-
-        for (r_ind, r) in enumerate(stats.loop_sizes)
-            @timeit to "circulation!" circulation!(Γ, Ip, (r, r))
-            @timeit to "statistics" update!(stats, Γ, r_ind; to=to)
+        if with_p
+            compute!(stats[CirculationFields.Momentum], Γ, Ip, ps, to)
         end
+
+        if with_vreg
+            @timeit to "compute_vreg!" map((v, p) -> v .= p ./ sqrt.(ρ), vs, ps)
+            compute!(stats[CirculationFields.RegVelocity], Γ, Ip, vs, to)
+        end
+
+        if with_v
+            @timeit to "compute_vel!" map((v, p) -> v .= p ./ ρ, vs, ps)
+            compute!(stats[CirculationFields.Velocity], Γ, Ip, vs, to)
+        end
+    end
+
+    stats
+end
+
+function compute!(stats::CirculationStats, Γ, Ip, vs, to)
+    # Set integral values with momentum data.
+    @timeit to "prepare!" prepare!(Ip, vs)
+
+    for (r_ind, r) in enumerate(stats.loop_sizes)
+        @timeit to "circulation!" circulation!(Γ, Ip, (r, r))
+        @timeit to "statistics" update!(stats, Γ, r_ind; to=to)
     end
 
     stats

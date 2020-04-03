@@ -9,7 +9,7 @@ using GPFields
 export IntegralField2D
 export prepare!
 export circulation, circulation!
-export analyse!, CirculationStats
+export analyse!, CirculationStats, CirculationFields
 
 include("loops/rectangle.jl")
 include("statistics/statistics.jl")

@@ -29,8 +29,6 @@ function update!(s::Histogram, Γ, r)
     s.Nsamples[r] += length(Γ)
     Ne = length(s.bin_edges)
 
-    # TODO this may be faster if we sort Γ first.
-    # In that case we can avoid using searchsortedlast.
     @inbounds for v in Γ
         i = searchsortedlast(s.bin_edges, v)
         if i ∉ (0, Ne)
