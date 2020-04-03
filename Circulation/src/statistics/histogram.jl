@@ -32,7 +32,7 @@ function update!(s::Histogram, Γ, r)
     @inbounds for v in Γ
         i = searchsortedlast(s.bin_edges, v)
         if i ∉ (0, Ne)
-            s.H[i] += 1
+            s.H[i, r] += 1
         end
     end
 
@@ -40,3 +40,10 @@ function update!(s::Histogram, Γ, r)
 end
 
 finalise!(s::Histogram) = s  # nothing to do
+
+function save_statistics(g, s::Histogram)
+    g["bin_edges"] = collect(s.bin_edges)
+    g["hist"] = s.H
+    g["total_samples"] = s.Nsamples
+    g
+end

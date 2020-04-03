@@ -63,3 +63,10 @@ function finalise!(s::Moments)
     end
     s
 end
+
+function save_statistics(g, s::Moments)
+    g["total_samples"] = s.Nsamples
+    g["M_odd"] = s.Modd
+    g["M_abs"] = s.Mabs
+    g
+end

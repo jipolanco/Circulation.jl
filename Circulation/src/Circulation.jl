@@ -1,6 +1,7 @@
 module Circulation
 
 using FFTW
+using HDF5
 using LinearAlgebra: mul!
 using TimerOutputs
 
@@ -9,7 +10,7 @@ using GPFields
 export IntegralField2D
 export prepare!
 export circulation, circulation!
-export analyse!, CirculationStats, CirculationFields
+export analyse!, CirculationStats, CirculationFields, save_statistics
 
 include("loops/rectangle.jl")
 include("statistics/statistics.jl")
