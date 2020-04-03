@@ -109,16 +109,27 @@ function load_psi(gp::ParamsGP, args...)
 end
 
 """
-    compute_momentum!(p::NTuple, ψ::ComplexArray, gp::ParamsGP)
+    compute_momentum!(p::NTuple, ψ::ComplexArray, gp::ParamsGP;
+                      buf=similar(ψ))
 
 Compute momentum from complex array ψ.
+
+Optionally, to avoid memory allocations, a buffer array may be passed.
+The array must have the same type and dimensions as ψ.
 """
 function compute_momentum!(p::NTuple{D,<:RealArray},
                            ψ::ComplexArray{T,D},
-                           gp::ParamsGP{D}) where {T,D}
+                           gp::ParamsGP{D};
+                           buf::ComplexArray{T,D}=similar(ψ),
+                          ) where {T,D}
     @assert all(size(pj) === size(ψ) for pj in p)
+    if size(buf) !== size(ψ)
+        throw(DimensionMismatch(
+            "inconsistent dimensions between ψ and buffer array"
+        ))
+    end
 
-    dψ = similar(ψ)  # ∇ψ component
+    dψ = buf  # ∇ψ component
 
     ks = get_wavenumbers(gp)  # (kx, ky, ...)
     @assert length.(ks) === size(ψ)
@@ -127,16 +138,20 @@ function compute_momentum!(p::NTuple{D,<:RealArray},
 
     # Loop over momentum components.
     for (n, pj) in enumerate(p)
+        plan_fw = plan_fft!(dψ, n)  # in-place FFT along n-th dimension
+        plan_bw = plan_ifft!(dψ, n)
+
         # 1. Compute dψ/dx[n].
         kn = ks[n]
-        plan = plan_fft!(ψ, n)  # in-place FFT along n-th dimension
+
         copy!(dψ, ψ)
-        plan * dψ  # apply in-place FFT
+        plan_fw * dψ  # apply in-place FFT
         @inbounds for I in CartesianIndices(dψ)
             kloc = kn[I[n]]
             dψ[I] *= im * kloc
         end
-        plan \ dψ  # apply in-place backward FFT
+
+        plan_bw * dψ  # apply in-place backward FFT
 
         # 2. Evaluate momentum p[n].
         @inbounds for i in eachindex(ψ)
@@ -164,7 +179,7 @@ Compute density from ψ.
 """
 function compute_density!(ρ::AbstractArray{<:Real,N},
                           ψ::AbstractArray{<:Complex,N}) where {N}
-    size(ρ) === size(ψ) || throw(ArgumentError("incompatible array dimensions"))
+    size(ρ) === size(ψ) || throw(DimensionMismatch())
     @inbounds for n in eachindex(ρ)
         ρ[n] = abs2(ψ[n])
     end

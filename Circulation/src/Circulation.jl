@@ -9,9 +9,10 @@ using GPFields
 export IntegralField2D
 export prepare!
 export circulation, circulation!
+export analyse!, CirculationStats
 
 include("loops/rectangle.jl")
-include("statistics.jl")
+include("statistics/statistics.jl")
 
 # Type definitions
 const ComplexArray{T,N} = AbstractArray{Complex{T},N} where {T<:Real,N}
