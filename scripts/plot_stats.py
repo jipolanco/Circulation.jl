@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import h5py
 
-STATS_FILE = '../notebooks/stats.h5'
+STATS_FILE = 'tangle_256.h5'
 
 KAPPA = 1.0 / np.pi  # not sure about this!
 

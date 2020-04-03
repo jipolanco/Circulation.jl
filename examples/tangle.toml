@@ -1,7 +1,7 @@
 [fields]
-data_directory = "~/Dropbox/circulation/data/4vortices"
+data_directory = "~/Dropbox/circulation/data/tangle"
 data_index = 1
-N = [256, 256]  # resolution: can be 2D or 3D
+N = [256, 256, 256]  # resolution: can be 2D or 3D
 # N = [256, 256, 1]
 
 [physics]
@@ -17,8 +17,9 @@ epsilon_velocity = 0
 # The three following examples are accepted.
 # loop_sizes = 4                   # a. single loop size
 # loop_sizes = "2:2:10"            # b. range of sizes
-loop_sizes = [1, 2, 4, 8, 16]      # c. list of sizes
+# loop_sizes = [1, 2, 4, 8, 16]    # c. list of sizes
+loop_sizes = [1, 2, 4, 8, 16, 32, 64]
 
 [output]
 # Statistics are saved in HDF5 format.
-statistics = "four_vortices.h5"
+statistics = "tangle_256.h5"
