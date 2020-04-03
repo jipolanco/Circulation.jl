@@ -1,13 +1,17 @@
 module Circulation
 
 using FFTW
-using LinearAlgebra: mul!, ldiv!
+using LinearAlgebra: mul!
+using TimerOutputs
+
+using GPFields
 
 export IntegralField2D
 export prepare!
 export circulation, circulation!
 
 include("loops/rectangle.jl")
+include("statistics.jl")
 
 # Type definitions
 const ComplexArray{T,N} = AbstractArray{Complex{T},N} where {T<:Real,N}
@@ -18,6 +22,8 @@ const RealArray{T,N} = AbstractArray{T,N} where {T<:Real,N}
 
 Contains arrays required to compute the integral of a 2D vector field
 `(vx, vy)`.
+
+Also contains FFT plans and array buffers for computation of integral data.
 
 ---
 
@@ -34,7 +40,7 @@ The domain size must be given as a tuple `L = (Lx, Ly)`.
 Allocate `IntegralField2D` having dimensions and type compatibles with input
 matrix.
 """
-struct IntegralField2D{T}
+struct IntegralField2D{T, PlansFW, PlansBW}
     N :: NTuple{2,Int}      # Nx, Ny
     L :: NTuple{2,Float64}  # domain size: Lx, Ly
 
@@ -42,13 +48,37 @@ struct IntegralField2D{T}
     U :: NTuple{2,Vector{T}}  # lengths: Ny, Nx
 
     # Integral fields wx(x, y), wy(x, y).
-    w :: NTuple{2,Matrix{T}}  # (Nx, Ny)
+    w :: NTuple{2,Matrix{T}}  # [Nx, Ny]
+
+    # FFTW plans (plan_x, plan_y)
+    plans_fw :: PlansFW  # forwards
+    plans_bw :: PlansBW  # backwards
+
+    # Buffer arrays for FFTs.
+    bufs :: NTuple{2,Vector{T}}  # lengths: Nx, Ny
+    bufs_f :: NTuple{2,Vector{Complex{T}}}
+
+    # Wave numbers
+    ks :: NTuple{2,Frequencies{Float64}}
 
     function IntegralField2D(Nx, Ny, ::Type{T} = Float64; L) where {T}
-        N = (Nx, Ny)
-        U = Vector{T}.(undef, N)
+        Ns = (Nx, Ny)
+        U = Vector{T}.(undef, (Ny, Nx))
         w = ntuple(_ -> Matrix{T}(undef, Nx, Ny), 2)
-        new{T}(N, L, U, w)
+
+        fs = 2pi .* Ns ./ L  # sampling frequency
+        ks = rfftfreq.(Ns, fs)
+
+        bufs = Vector{T}.(undef, Ns)
+        bufs_f = Vector{Complex{T}}.(undef, length.(ks))
+
+        plans_fw = plan_rfft.(bufs)
+        plans_bw = plan_irfft.(bufs_f, Ns)
+
+        Pfw = typeof(plans_fw)
+        Pbw = typeof(plans_bw)
+
+        new{T, Pfw, Pbw}(Ns, L, U, w, plans_fw, plans_bw, bufs, bufs_f, ks)
     end
 
     IntegralField2D(A::AbstractMatrix{T}; kwargs...) where {T<:AbstractFloat} =
@@ -71,22 +101,28 @@ function prepare!(I::IntegralField2D{T},
         throw(DimensionMismatch("incompatible array sizes"))
     end
 
-    # Wave numbers
-    fs = 2pi .* Ns ./ I.L  # sampling frequency
-    ks = rfftfreq.(Ns, fs)
-
+    ks = I.ks
     Nx, Ny = Ns
 
     # First velocity component
-    let U = I.U[1], u = v[1], k = ks[1]
+    let c = 1
+        U = I.U[c]
+        u = v[c]
+        k = ks[c]
+
         @assert k[1] == 0
         Nk = length(k)
 
-        plan = plan_rfft(view(u, :, 1))
-        uf = Array{Complex{T}}(undef, Nk)
+        plan_fw = I.plans_fw[c]
+        plan_bw = I.plans_bw[c]
+        ubuf = I.bufs[c]
+        uf = I.bufs_f[c]
 
         for j = 1:Ny
-            mul!(uf, plan, view(u, :, j))  # apply FFT
+            for i = 1:Nx
+                ubuf[i] = u[i, j]
+            end
+            mul!(uf, plan_fw, ubuf)  # apply FFT
 
             # Copy mean value and then set it to zero.
             # Note: the mean value must be normalised by the input data length.
@@ -97,25 +133,32 @@ function prepare!(I::IntegralField2D{T},
                 uf[i] /= im * k[i]  # w(k) -> w(k) / ik
             end
 
-            wj = @view I.w[1][:, j]
-            ldiv!(wj, plan, uf)  # apply inverse FFT
+            mul!(ubuf, plan_bw, uf)  # apply inverse FFT
+            for i = 1:Nx
+                I.w[1][i, j] = ubuf[i]
+            end
         end
     end
 
     # Second velocity component
-    let U = I.U[2], u = v[2], k = ks[2]
+    let c = 2
+        U = I.U[2]
+        u = v[2]
+        k = ks[2]
+
         @assert k[1] == 0
         Nk = length(k)
 
-        # In this case, we copy data from/to a contiguous buffer `ubuf`.
-        # This is needed to make FFT plans work.
-        uf = Array{Complex{T}}(undef, Nk)
-        ubuf = Array{T}(undef, Ny)
-        plan = plan_rfft(ubuf)
+        plan_fw = I.plans_fw[c]
+        plan_bw = I.plans_bw[c]
+        ubuf = I.bufs[c]
+        uf = I.bufs_f[c]
 
         for i = 1:Nx
-            copyto!(ubuf, view(u, i, :))
-            mul!(uf, plan, ubuf)
+            for j = 1:Ny
+                ubuf[j] = u[i, j]
+            end
+            mul!(uf, plan_fw, ubuf)
 
             U[i] = Real(uf[1]) / Ny
             uf[1] = 0
@@ -124,9 +167,10 @@ function prepare!(I::IntegralField2D{T},
                 uf[j] /= im * k[j]  # w(k) -> w(k) / ik
             end
 
-            wi = @view I.w[2][i, :]
-            ldiv!(ubuf, plan, uf)  # apply inverse FFT
-            copyto!(wi, ubuf)
+            mul!(ubuf, plan_bw, uf)  # apply inverse FFT
+            for j = 1:Ny
+                I.w[2][i, j] = ubuf[j]
+            end
         end
     end
 
