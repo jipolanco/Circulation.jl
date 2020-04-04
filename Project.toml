@@ -1,5 +1,4 @@
 [deps]
-ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 Circulation = "f9745a5e-b5bf-4554-ab79-8fb660046134"
 FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"

@@ -3,22 +3,29 @@
 using GPFields
 using Circulation
 
-using ArgParse
 import Pkg.TOML
 using LinearAlgebra: norm
 using TimerOutputs
 
 import Base.Threads
 
+const USAGE =
+"""
+Usage: julia $(basename(@__FILE__)) CONFIG_FILE.toml
+  
+Compute circulation statistics from GP field.
+  
+Parameters of the field and of the statistics must be set in a configuration
+file."""
+
 function parse_commandline()
-    s = ArgParseSettings()
-    @add_arg_table! s begin
-        "--parameter-file", "-p"
-            help = "path to TOML parameter file"
-            arg_type = String
-            default = "circulation.toml"
+    help = any(("--help", "-h") .∈ Ref(ARGS))
+    if isempty(ARGS) || help
+        println(USAGE)
+        exit(help ? 0 : 1)
     end
-    parse_args(s)
+    config_file = ARGS[1]
+    Dict("parameter-file" => config_file)
 end
 
 function params_from_file(filename)
@@ -87,12 +94,24 @@ function main(P::NamedTuple)
     stats = Circulation.init_statistics(
         loop_sizes, num_moments=20, hist_edges=LinRange(-20κ, 20κ, 1000))
 
+    # First run for precompilation (-> accurate timings)
     analyse!(
         stats, params, P.fields.data_dir,
         data_idx=P.fields.data_idx,
         eps_vel=P.circulation.eps_velocity,
         to=to,
-        slice_selection=1:2,
+        max_slices=1,
+    )
+
+    reset_timer!(to)
+    reset!(stats)
+
+    analyse!(
+        stats, params, P.fields.data_dir,
+        data_idx=P.fields.data_idx,
+        eps_vel=P.circulation.eps_velocity,
+        to=to,
+        max_slices=8,
     )
 
     println(to)
@@ -103,13 +122,13 @@ function main(P::NamedTuple)
 end
 
 function main()
+    args = parse_commandline()
+    p = params_from_file(args["parameter-file"])
+
     @info "Using $(Threads.nthreads()) threads"
     if Threads.nthreads() == 1
         @info "Set the JULIA_NUM_THREADS environment variable to change this."
     end
-
-    args = parse_commandline()
-    p = params_from_file(args["parameter-file"])
 
     params = (
         fields = parse_params_fields(p["fields"]),
