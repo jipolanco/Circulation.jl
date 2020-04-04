@@ -24,6 +24,9 @@ struct Moments{T}
     end
 end
 
+Base.eltype(::Type{<:Moments{T}}) where {T} = T
+Base.zero(s::Moments) = Moments(s.Nm, s.Nr, eltype(s))
+
 function update!(s::Moments, Γ, r)
     @assert 1 <= r <= s.Nr
 
@@ -50,6 +53,17 @@ function update!(s::Moments, Γ, r)
         end
     end
 
+    s
+end
+
+function reduce!(s::Moments, v::AbstractVector{<:Moments})
+    for src in v
+        @assert s.Nr == src.Nr
+        @assert s.Nm == src.Nm
+        s.Nsamples .+= src.Nsamples
+        s.Mabs .+= src.Mabs
+        s.Modd .+= src.Modd
+    end
     s
 end
 

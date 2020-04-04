@@ -23,6 +23,9 @@ struct Histogram{T, BinType<:AbstractVector}
     end
 end
 
+Base.eltype(::Type{<:Histogram{T}}) where {T} = T
+Base.zero(s::Histogram) = Histogram(s.bin_edges, s.Nr, eltype(s))
+
 function update!(s::Histogram, Γ, r)
     @assert 1 <= r <= s.Nr
 
@@ -36,6 +39,17 @@ function update!(s::Histogram, Γ, r)
         end
     end
 
+    s
+end
+
+function reduce!(s::Histogram, v::AbstractVector{<:Histogram})
+    for src in v
+        @assert s.Nr == src.Nr
+        @assert s.Nbins == src.Nbins
+        @assert s.bin_edges == src.bin_edges
+        s.H .+= src.H
+        s.Nsamples .+= src.Nsamples
+    end
     s
 end
 

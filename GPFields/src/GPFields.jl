@@ -109,19 +109,41 @@ function load_psi(gp::ParamsGP, args...)
 end
 
 """
+    create_fft_plans_1d!(ψ::ComplexArray{T,N}) -> (plans_1, plans_2, ...)
+
+Create in-place complex-to-complex FFT plans.
+
+Returns `N` pairs of forward/backward plans along each dimension.
+"""
+function create_fft_plans_1d!(ψ::ComplexArray{T,D}) where {T,D}
+    ntuple(Val(D)) do d
+        p = plan_fft!(ψ, d)
+        (fw=p, bw=inv(p))
+    end
+end
+
+"""
     compute_momentum!(p::NTuple, ψ::ComplexArray, gp::ParamsGP;
-                      buf=similar(ψ))
+                      buf=similar(ψ),
+                      fft_plans = create_fft_plans_1d!(ψ),
+                      )
 
 Compute momentum from complex array ψ.
 
 Optionally, to avoid memory allocations, a buffer array may be passed.
 The array must have the same type and dimensions as ψ.
+
+Precomputed FFT plans may be passed via the `fft_plans` argument.
+These should be generated using `create_fft_plans_1d!`.
+This is not only good for performance, but it also avoids problems when using
+threads.
 """
 function compute_momentum!(p::NTuple{D,<:RealArray},
-                           ψ::ComplexArray{T,D},
-                           gp::ParamsGP{D};
-                           buf::ComplexArray{T,D}=similar(ψ),
-                          ) where {T,D}
+        ψ::ComplexArray{T,D},
+        gp::ParamsGP{D};
+        buf::ComplexArray{T,D} = similar(ψ),
+        fft_plans = create_fft_plans_1d!(ψ),
+        ) where {T,D}
     @assert all(size(pj) === size(ψ) for pj in p)
     if size(buf) !== size(ψ)
         throw(DimensionMismatch(
@@ -138,20 +160,19 @@ function compute_momentum!(p::NTuple{D,<:RealArray},
 
     # Loop over momentum components.
     for (n, pj) in enumerate(p)
-        plan_fw = plan_fft!(dψ, n)  # in-place FFT along n-th dimension
-        plan_bw = plan_ifft!(dψ, n)
+        plans = fft_plans[n]
 
         # 1. Compute dψ/dx[n].
         kn = ks[n]
 
         copy!(dψ, ψ)
-        plan_fw * dψ  # apply in-place FFT
+        plans.fw * dψ  # apply in-place FFT
         @inbounds for I in CartesianIndices(dψ)
             kloc = kn[I[n]]
             dψ[I] *= im * kloc
         end
 
-        plan_bw * dψ  # apply in-place backward FFT
+        plans.bw * dψ  # apply in-place backward FFT
 
         # 2. Evaluate momentum p[n].
         @inbounds for i in eachindex(ψ)

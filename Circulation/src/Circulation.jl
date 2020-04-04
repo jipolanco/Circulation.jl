@@ -7,6 +7,8 @@ using TimerOutputs
 
 using GPFields
 
+FFTW.set_num_threads(1)
+
 export IntegralField2D
 export prepare!
 export circulation, circulation!
