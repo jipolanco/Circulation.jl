@@ -55,6 +55,12 @@ end
 
 finalise!(s::Histogram) = s  # nothing to do
 
+function reset!(s::Histogram)
+    fill!(s.H, 0)
+    fill!(s.Nsamples, 0)
+    s
+end
+
 function save_statistics(g, s::Histogram)
     g["bin_edges"] = collect(s.bin_edges)
     g["hist"] = s.H

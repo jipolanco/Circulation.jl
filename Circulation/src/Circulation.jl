@@ -3,6 +3,7 @@ module Circulation
 using FFTW
 using HDF5
 using LinearAlgebra: mul!
+using ProgressMeter
 using TimerOutputs
 
 using GPFields
@@ -12,7 +13,8 @@ FFTW.set_num_threads(1)
 export IntegralField2D
 export prepare!
 export circulation, circulation!
-export analyse!, CirculationStats, CirculationFields, save_statistics
+export analyse!
+export CirculationStats, CirculationFields, save_statistics, reset!
 
 include("loops/rectangle.jl")
 include("statistics/statistics.jl")

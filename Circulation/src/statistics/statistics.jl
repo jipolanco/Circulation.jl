@@ -89,7 +89,19 @@ function finalise!(stats::CirculationStats)
     stats
 end
 
+"""
+    reset!(stats::CirculationStats)
+
+Reset all statistics to zero.
+"""
+function reset!(stats::CirculationStats)
+    reset!(stats.moments)
+    reset!(stats.histogram)
+    stats
+end
+
 finalise!(stats::StatsDict) = finalise!.(values(stats))
+reset!(s::StatsDict) = reset!.(values(s))
 
 function reduce!(dest::StatsDict, src::AbstractVector{<:StatsDict})
     @assert all(Ref(keys(dest)) .== keys.(src))
@@ -233,6 +245,11 @@ function analyse!(stats::StatsDict, orientation::Val, gp::ParamsGP{D},
               for t = 1:Nth]
     stats_t = [zero(stats) for t = 1:Nth]
 
+    # Progress metre
+    progress = let s = orientation_str(orientation)
+        Progress(length(slices), desc="Slice($s): ")
+    end
+
     Threads.@threads for s in slices
         t = Threads.threadid()
         F = fields[t]
@@ -245,6 +262,8 @@ function analyse!(stats::StatsDict, orientation::Val, gp::ParamsGP{D},
             stats_t[t], slice, gp, F, timer, data_params, eps_vel,
             (with_p, with_vreg, with_v)
         )
+
+        next!(progress)
     end
 
     @timeit to "reduce!" reduce!(stats, stats_t)
@@ -321,6 +340,8 @@ function included_dimensions(::Val{N}, ::Val{s}) where {N,s}
     @assert length(inds) == 2
     inds[1], inds[2]
 end
+
+orientation_str(::Val{s}) where {s} = "xyz"[s]
 
 slice_orientations(::ParamsGP{2}) = (Val(3), )       # 2D data -> single z-slice
 slice_orientations(::ParamsGP{3}) = Val.((1, 2, 3))  # 3D data

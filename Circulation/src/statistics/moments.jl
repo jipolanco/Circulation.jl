@@ -78,6 +78,11 @@ function finalise!(s::Moments)
     s
 end
 
+function reset!(s::Moments)
+    fill!.((s.Nsamples, s.Mabs, s.Modd), 0)
+    s
+end
+
 function save_statistics(g, s::Moments)
     g["total_samples"] = s.Nsamples
     g["M_odd"] = s.Modd
