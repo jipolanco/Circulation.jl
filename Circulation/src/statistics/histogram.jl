@@ -61,7 +61,7 @@ function reset!(s::Histogram)
     s
 end
 
-function save_statistics(g, s::Histogram)
+function Base.write(g, s::Histogram)
     g["bin_edges"] = collect(s.bin_edges)
     g["hist"] = s.H
     g["total_samples"] = s.Nsamples

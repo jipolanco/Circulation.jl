@@ -83,7 +83,7 @@ function reset!(s::Moments)
     s
 end
 
-function save_statistics(g, s::Moments)
+function Base.write(g, s::Moments)
     g["total_samples"] = s.Nsamples
     g["M_odd"] = s.Modd
     g["M_abs"] = s.Mabs

@@ -4,6 +4,7 @@ export ParamsGP
 export get_coordinates
 
 using FFTW
+using HDF5
 using Printf: @sprintf
 import Mmap
 

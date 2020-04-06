@@ -113,27 +113,27 @@ function reduce!(dest::StatsDict, src::AbstractVector{<:StatsDict})
 end
 
 """
-    save_statistics(filename::AbstractString, stats::StatsDict)
-    save_statistics(ff::Union{HDF5File,HDF5Group}, stats::StatsDict)
+    write(filename::AbstractString, stats::StatsDict)
+    write(ff::Union{HDF5File,HDF5Group}, stats::StatsDict)
 
 Save statistics to HDF5 file.
 """
-save_statistics(h5filename::AbstractString, args...) =
-    h5open(ff -> save_statistics(ff, args...), h5filename, "w")
+Base.write(h5filename::AbstractString, stats::StatsDict) =
+    h5open(ff -> write(ff, stats), h5filename, "w")
 
-function save_statistics(ff::Union{HDF5File,HDF5Group}, stats::StatsDict)
+function Base.write(ff::Union{HDF5File,HDF5Group}, stats::StatsDict)
     for (k, v) in stats
         g = g_create(ff, string(k))
-        save_statistics(g, v)
+        write(g, v)
         close(g)
     end
     ff
 end
 
-function save_statistics(g::Union{HDF5File,HDF5Group}, stats::CirculationStats)
+function Base.write(g::Union{HDF5File,HDF5Group}, stats::CirculationStats)
     g["loop_sizes"] = collect(stats.loop_sizes)
-    save_statistics(g_create(g, "Moments"), stats.moments)
-    save_statistics(g_create(g, "Histogram"), stats.histogram)
+    write(g_create(g, "Moments"), stats.moments)
+    write(g_create(g, "Histogram"), stats.histogram)
     g
 end
 
@@ -247,6 +247,8 @@ function analyse!(stats::StatsDict, orientation::Val, gp::ParamsGP{D},
 
     # Progress metre
     progress = let s = orientation_str(orientation)
+        println(stderr)
+        @info "Analysing slices $slices along $s"
         Progress(length(slices), desc="Slice($s): ")
     end
 

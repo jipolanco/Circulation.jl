@@ -55,3 +55,18 @@ get_wavenumbers(g::ParamsGP) = map(g.dims, g.L) do N, L
     sampling_freq = 2pi * N / L  # = 2π / Δx
     fftfreq(N, sampling_freq)
 end
+
+"""
+    write(g::Union{HDF5File,HDF5Group}, p::ParamsGP)
+
+Write GP parameters to HDF5 file.
+"""
+function Base.write(g::Union{HDF5File,HDF5Group}, p::ParamsGP)
+    g["dims"] = collect(p.dims)
+    g["L"] = collect(p.L)
+    g["c"] = p.c
+    g["nxi"] = p.nξ
+    g["xi"] = p.ξ
+    g["kappa"] = p.κ
+    g
+end

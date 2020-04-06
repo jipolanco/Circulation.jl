@@ -4,17 +4,17 @@ using GPFields
 using Circulation
 
 import Pkg.TOML
-using LinearAlgebra: norm
 using TimerOutputs
+using HDF5
 
 import Base.Threads
 
 const USAGE =
 """
 Usage: julia $(basename(@__FILE__)) CONFIG_FILE.toml
-  
+
 Compute circulation statistics from GP field.
-  
+
 Parameters of the field and of the statistics must be set in a configuration
 file."""
 
@@ -57,11 +57,29 @@ parse_params_output(d::Dict) = (
     statistics = d["statistics"] :: String,
 )
 
-function parse_params_circulation(d::Dict)
+function parse_params_circulation(d::Dict, dims)
+    max_slices = let m = get(d, "max_slices", 0) :: Int
+        m == 0 ? typemax(Int) : m  # replace 0 -> typemax(Int)
+    end
+    loop_sizes = parse_loop_sizes(d["loops"], dims) :: AbstractVector{Int}
     (
         eps_velocity = d["epsilon_velocity"] :: Real,
-        loop_sizes = parse_loop_sizes(d["loop_sizes"]),
+        max_slices = max_slices,
+        loop_sizes = loop_sizes,
     )
+end
+
+function parse_loop_sizes(d::Dict, dims::Dims)
+    type = d["selection_type"]
+    if type == "list"
+        return parse_loop_sizes(d["sizes"])
+    elseif type == "log"
+        base = d["log_base"] :: Real
+        Rmax = min(dims...) / 2  # max loop size is half resolution N/2
+        Nmax = floor(Int, log(base, Rmax))
+        return unique(round.(Int, base .^ (0:Nmax)))
+    end
+    nothing
 end
 
 parse_loop_sizes(s::Vector{Int}) = s
@@ -86,7 +104,7 @@ function main(P::NamedTuple)
     )
 
     loop_sizes = P.circulation.loop_sizes
-    @info "Loop sizes: $loop_sizes"
+    @info "Loop sizes: $loop_sizes ($(length(loop_sizes)) sizes)"
 
     κ = params.κ
 
@@ -111,12 +129,16 @@ function main(P::NamedTuple)
         data_idx=P.fields.data_idx,
         eps_vel=P.circulation.eps_velocity,
         to=to,
-        max_slices=8,
+        max_slices=P.circulation.max_slices,
     )
 
     println(to)
 
-    save_statistics(P.output.statistics, stats)
+    @info "Saving $(P.output.statistics)"
+    h5open(P.output.statistics, "w") do ff
+        write(g_create(ff, "ParamsGP"), params)
+        write(g_create(ff, "Circulation"), stats)
+    end
 
     nothing
 end
@@ -130,9 +152,11 @@ function main()
         @info "Set the JULIA_NUM_THREADS environment variable to change this."
     end
 
+    fields = parse_params_fields(p["fields"])
+
     params = (
-        fields = parse_params_fields(p["fields"]),
-        circulation = parse_params_circulation(p["circulation"]),
+        fields = fields,
+        circulation = parse_params_circulation(p["circulation"], fields.dims),
         physics = parse_params_physics(p["physics"]),
         output = parse_params_output(p["output"]),
     )

@@ -7,8 +7,6 @@ import h5py
 
 STATS_FILE = 'tangle_256.h5'
 
-KAPPA = 1.0 / np.pi  # not sure about this!
-
 QUANTITIES = (
     'Velocity',
     'RegVelocity',
@@ -16,21 +14,21 @@ QUANTITIES = (
 )
 
 
-def plot_histogram(ax: plt.Axes, g: h5py.Group, plot_kw={}):
-    rs = g.parent['loop_sizes'][()]
+def plot_histogram(ax: plt.Axes, g: h5py.Group, params, plot_kw={}):
+    rs = g.parent['loop_sizes'][:] / params['nxi']  # r / ξ
     Nr = rs.size
     bins = g['bin_edges'][:]
     x = (bins[:-1] + bins[1:]) / 2
-    x /= KAPPA
+    x /= params['kappa']
     # name = g.parent.name.replace('/', '')
-    for r in range(Nr):
+    for r in range(0, Nr, 4):
         hist = g['hist'][r, :]
-        ax.plot(x, hist, color=f'C{r}', label=f'$r = {rs[r]}$',
+        ax.plot(x, hist, color=f'C{r}', label='${:.2f}$'.format(rs[r]),
                 **plot_kw)
 
 
-def plot_moments(ax: plt.Axes, g: h5py.Group, plot_kw={}):
-    rs = g.parent['loop_sizes'][()]
+def plot_moments(ax: plt.Axes, g: h5py.Group, params, plot_kw={}):
+    rs = g.parent['loop_sizes'][:]
     Mabs = g['M_abs'][:, :]
     # Modd = g['M_odd'][:, :]
     Np = Mabs.shape[1]
@@ -38,30 +36,40 @@ def plot_moments(ax: plt.Axes, g: h5py.Group, plot_kw={}):
     for p in range(1, Np, 2):
         # This normalisation works great for the real velocity.
         # Is there a characteristic velocity equal to sqrt(2)?
-        norm = (np.sqrt(2) * 2 * np.pi)**(p + 1)
-        # norm = KAPPA**(p + 1)
-        ax.plot(rs, Mabs[:, p] / norm, label=f'$p = {p + 1}$', **plot_kw)
+        # norm = (np.sqrt(2) * 2 * np.pi)**(p + 1)
+        norm = params['kappa']**(p + 1)
+        ax.plot(rs / params['nxi'], Mabs[:, p] / norm,
+                label=f'$p = {p + 1}$', **plot_kw)
 
 
 with h5py.File(STATS_FILE, 'r') as ff:
+    g_params = ff['/ParamsGP']
+    params = dict(
+        kappa=g_params['kappa'][()],
+        xi=g_params['xi'][()],
+        nxi=g_params['nxi'][()],
+    )
+
+    g_circ = ff['/Circulation']
+
     fig, axes = plt.subplots(2, 3, figsize=(12, 6),
                              sharex='row', sharey='row')
 
     for j, name in enumerate(QUANTITIES):
-        g = ff[name]
+        g = g_circ[name]
 
         ax = axes[0, j]
-        plot_histogram(ax, g['Histogram'])
+        plot_histogram(ax, g['Histogram'], params)
         ax.set_yscale('log')
-        ax.legend(fontsize='x-small', ncol=2)
+        ax.legend(fontsize='x-small', ncol=1, title='$r / ξ$')
         ax.set_title(name)
 
         ax = axes[1, j]
-        plot_moments(ax, g['Moments'], plot_kw=dict(marker='x'))
+        plot_moments(ax, g['Moments'], params, plot_kw=dict(marker='x'))
         ax.set_xscale('log')
         ax.set_yscale('log')
-        ax.set_xlabel('$r$')
-        ax.legend()
+        ax.set_xlabel('$r / ξ$')
+        ax.legend(fontsize='x-small', ncol=2)
 
 
 plt.show()
