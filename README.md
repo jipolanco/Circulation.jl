@@ -15,11 +15,11 @@ julia --project -e "using Pkg; Pkg.instantiate()"
 ## Running scripts
 
 The [`circulation.jl`](scripts/circulation.jl) script loads parameters from a TOML file.
-As an example, see [`four_vortices.toml`](examples/four_vortices.toml).
+As an example, see [`tangle.toml`](examples/tangle.toml).
 
 To run the script with the example parameter file:
 
 ```bash
 export JULIA_NUM_THREADS=4  # optional, to use threads
-julia --project scripts/circulation.jl -p examples/four_vortices.toml
+julia --project scripts/circulation.jl -p examples/tangle.toml
 ```
