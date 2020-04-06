@@ -130,8 +130,8 @@ function prepare!(I::IntegralField2D, u, ::Val{c}) where {c}
 
     for j = 1:Nother
         for i = 1:Nc
-            I = (c === 1) ? CartesianIndex((i, j)) : CartesianIndex((j, i))
-            ubuf[i] = u[I]
+            ind = (c === 1) ? CartesianIndex((i, j)) : CartesianIndex((j, i))
+            ubuf[i] = u[ind]
         end
         mul!(uf, plan_fw, ubuf)  # apply FFT
 
@@ -146,8 +146,8 @@ function prepare!(I::IntegralField2D, u, ::Val{c}) where {c}
 
         mul!(ubuf, plan_bw, uf)  # apply inverse FFT
         for i = 1:Nc
-            I = (c === 1) ? CartesianIndex((i, j)) : CartesianIndex((j, i))
-            w[I] = ubuf[i]
+            ind = (c === 1) ? CartesianIndex((i, j)) : CartesianIndex((j, i))
+            w[ind] = ubuf[i]
         end
     end
 
