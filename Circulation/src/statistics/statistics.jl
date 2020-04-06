@@ -272,6 +272,7 @@ function analyse!(stats::StatsDict, orientation::Val, gp::ParamsGP{D},
 end
 
 function allocate_stats_fields((Ni, Nj), (Li, Lj), with_v)
+    FFTW.set_num_threads(1)  # make sure that plans are not threaded!
     ψ = Array{ComplexF64}(undef, Ni, Nj)
     ρ = similar(ψ, Float64)
     ps = (similar(ρ), similar(ρ))  # momentum

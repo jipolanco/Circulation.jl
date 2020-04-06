@@ -7,8 +7,6 @@ using TimerOutputs
 
 using GPFields
 
-FFTW.set_num_threads(1)
-
 export IntegralField2D
 export prepare!
 export circulation, circulation!
@@ -77,6 +75,7 @@ struct IntegralField2D{T, PlansFW, PlansBW}
         bufs = Vector{T}.(undef, Ns)
         bufs_f = Vector{Complex{T}}.(undef, length.(ks))
 
+        FFTW.set_num_threads(1)  # make sure that plans are not threaded!
         plans_fw = plan_rfft.(bufs)
         plans_bw = plan_irfft.(bufs_f, Ns)
 
