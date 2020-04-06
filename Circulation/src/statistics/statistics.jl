@@ -237,6 +237,7 @@ function analyse!(stats::StatsDict, orientation::Val, gp::ParamsGP{D},
     with_p = CirculationFields.Momentum in stats_keys
 
     Nth = Threads.nthreads()
+    slices_per_thread = ceil(Int, Nslices / Nth)
 
     # Allocate arrays (one per thread).
     fields = [allocate_stats_fields((Ni, Nj), (Li, Lj), with_v || with_vreg)
@@ -253,7 +254,7 @@ function analyse!(stats::StatsDict, orientation::Val, gp::ParamsGP{D},
         F = fields[t]
 
         if t == 1
-            @info "  Thread 1: slice $s"
+            @info "  Thread 1: slice $s/$slices_per_thread"
         end
 
         # Load ψ at selected slice.
