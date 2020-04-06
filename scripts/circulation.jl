@@ -42,7 +42,7 @@ function parse_params_fields(d::Dict)
         error("`N` parameter must be a vector of 2 or 3 integers")
     end
     (
-        data_dir = expanduser(d["data_directory"] :: String),
+        data_dir = replace_env(expanduser(d["data_directory"] :: String)),
         data_idx = d["data_index"] :: Int,
         dims = tuple(dims...),
     )
@@ -54,7 +54,7 @@ parse_params_physics(d::Dict) = (
 )
 
 parse_params_output(d::Dict) = (
-    statistics = d["statistics"] :: String,
+    statistics = replace_env(d["statistics"] :: String),
 )
 
 function parse_params_circulation(d::Dict, dims)
@@ -102,6 +102,16 @@ function parse_loop_sizes(s::String)
     catch e
         error("cannot parse range from string '$s'")
     end
+end
+
+# Replace environment variables in string.
+function replace_env(s::String)
+    # Is there an easier way to do this??
+    while (m = match(r"\$(\w+)", s)) !== nothing
+        var = m[1]
+        s = replace(s, "\$$var" => ENV[var])
+    end
+    s
 end
 
 function main(P::NamedTuple)

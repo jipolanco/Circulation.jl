@@ -1,5 +1,6 @@
 [fields]
-data_directory = "~/Dropbox/circulation/data/tangle/256"
+# Path to data. Note that environment variables are allowed.
+data_directory = "$HOME/Dropbox/circulation/data/tangle/256"
 data_index = 1
 N = [256, 256, 256]  # resolution: can be 2D or 3D
 
