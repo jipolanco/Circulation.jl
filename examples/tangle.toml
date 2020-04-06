@@ -1,9 +1,9 @@
 [fields]
-data_directory = "~/Dropbox/circulation/data/tangle"
+data_directory = "~/Dropbox/circulation/data/tangle/256"
 data_index = 1
 N = [256, 256, 256]  # resolution: can be 2D or 3D
 
-# data_directory = "~/Work/simulation_data/GP/circulation/tangle"
+# data_directory = "~/Work/simulation_data/GP/circulation/tangle/1024"
 # data_index = 100
 # N = [1024, 1024, 1024]
 
