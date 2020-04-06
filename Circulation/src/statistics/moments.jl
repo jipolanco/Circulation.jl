@@ -8,10 +8,10 @@ struct Moments{T}
     Nm     :: Int  # number of moments to compute (assumed to be even)
     Nm_odd :: Int  # number of odd moments to compute (= N / 2)
 
-    Nsamples :: Vector{Int}  # number of samples per column (Nr)
+    Nsamples :: Vector{Int}   # number of samples per column [Nr]
 
-    Mabs :: Matrix{T}  # moments of |Γ|   (Nm, Nr)
-    Modd :: Matrix{T}  # odd moments of Γ (Nm_odd, Nr)
+    Mabs :: Matrix{T}  # moments of |Γ|   [Nm, Nr]
+    Modd :: Matrix{T}  # odd moments of Γ [Nm_odd, Nr]
 
     function Moments(N::Integer, Nr::Integer, ::Type{T} = Float64) where {T}
         iseven(N) || throw(ArgumentError("`N` should be even!"))
@@ -22,6 +22,12 @@ struct Moments{T}
         Modd = zeros(T, Nodd, Nr)
         new{T}(Nr, N, Nodd, Nsamples, Mabs, Modd)
     end
+end
+
+# Get moment exponents.
+function exponents(s::Moments; odd=false)
+    N = odd ? s.Nm_odd : s.Nm
+    1:N
 end
 
 Base.eltype(::Type{<:Moments{T}}) where {T} = T
@@ -87,5 +93,7 @@ function Base.write(g, s::Moments)
     g["total_samples"] = s.Nsamples
     g["M_odd"] = s.Modd
     g["M_abs"] = s.Mabs
+    g["p_abs"] = collect(exponents(s, odd=false))
+    g["p_odd"] = collect(exponents(s, odd=true))
     g
 end

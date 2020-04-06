@@ -31,15 +31,17 @@ def plot_moments(ax: plt.Axes, g: h5py.Group, params, plot_kw={}):
     rs = g.parent['loop_sizes'][:]
     Mabs = g['M_abs'][:, :]
     # Modd = g['M_odd'][:, :]
-    Np = Mabs.shape[1]
+    ps = g['p_abs'][:]  # moment exponents
+    Np = ps.size
     # Nodd = Modd.shape[1]
-    for p in range(1, Np, 2):
+    for i in range(1, Np, 2):
         # This normalisation works great for the real velocity.
         # Is there a characteristic velocity equal to sqrt(2)?
         # norm = (np.sqrt(2) * 2 * np.pi)**(p + 1)
-        norm = params['kappa']**(p + 1)
-        ax.plot(rs / params['nxi'], Mabs[:, p] / norm,
-                label=f'$p = {p + 1}$', **plot_kw)
+        p = ps[i]
+        norm = params['kappa']**p
+        ax.plot(rs / params['nxi'], Mabs[:, i] / norm,
+                label=f'$p = {p}$', **plot_kw)
 
 
 with h5py.File(STATS_FILE, 'r') as ff:

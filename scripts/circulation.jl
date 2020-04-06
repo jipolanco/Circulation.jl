@@ -62,10 +62,18 @@ function parse_params_circulation(d::Dict, dims)
         m == 0 ? typemax(Int) : m  # replace 0 -> typemax(Int)
     end
     loop_sizes = parse_loop_sizes(d["loops"], dims) :: AbstractVector{Int}
+
+    stats = d["statistics"]
+    moments = stats["moments"]
+    hist = stats["histogram"]
+
     (
         eps_velocity = d["epsilon_velocity"] :: Real,
         max_slices = max_slices,
         loop_sizes = loop_sizes,
+        moments_pmax = moments["p_max"] :: Int,
+        hist_Nedges = hist["num_bin_edges"] :: Int,
+        hist_max_kappa = Float64(hist["max_kappa"]),
     )
 end
 
@@ -106,11 +114,16 @@ function main(P::NamedTuple)
     loop_sizes = P.circulation.loop_sizes
     @info "Loop sizes: $loop_sizes ($(length(loop_sizes)) sizes)"
 
-    κ = params.κ
-
     to = TimerOutput()
-    stats = Circulation.init_statistics(
-        loop_sizes, num_moments=20, hist_edges=LinRange(-20κ, 20κ, 1000))
+    stats = let par = P.circulation
+        M = par.hist_max_kappa
+        Nedges = par.hist_Nedges
+        κ = params.κ
+        edges = LinRange(-M * κ, M * κ, Nedges)
+
+        Circulation.init_statistics(
+            loop_sizes, num_moments=par.moments_pmax, hist_edges=edges)
+    end
 
     # First run for precompilation (-> accurate timings)
     analyse!(

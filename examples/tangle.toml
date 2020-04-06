@@ -38,6 +38,14 @@ epsilon_velocity = 0
     # Repeated values will be removed.
     log_base = 1.1
 
+    [circulation.statistics.moments]
+    p_max = 16  # maximum exponent (should be even)
+
+    [circulation.statistics.histogram]
+    num_bin_edges = 4000  # number of bin edges; should be even so that the
+                          # zero value falls inside a bin
+    max_kappa = 30.5  # max value in histogram (in units of kappa)
+
 [output]
 # Statistics are saved in HDF5 format.
 statistics = "tangle_256.h5"
