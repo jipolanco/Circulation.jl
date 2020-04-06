@@ -96,7 +96,7 @@ Base.size(I::IntegralField2D) = I.N
 Base.eltype(::Type{IntegralField2D{T}}) where {T} = T
 
 """
-    prepare!(I::IntegralField2D{T}, v, Ls)
+    prepare!(I::IntegralField2D{T}, v)
 
 Set values of the integral fields from 2D vector field `v = (vx, vy)`.
 """
@@ -106,77 +106,49 @@ function prepare!(I::IntegralField2D{T},
     if any(Ref(Ns) .!= size.(v))
         throw(DimensionMismatch("incompatible array sizes"))
     end
+    prepare!(I, v[1], Val(1))
+    prepare!(I, v[2], Val(2))
+    I
+end
 
-    ks = I.ks
-    Nx, Ny = Ns
+function prepare!(I::IntegralField2D, u, ::Val{c}) where {c}
+    @assert c in (1, 2)
+    U = I.U[c]
+    k = I.ks[c]
+    plan_fw = I.plans_fw[c]
+    plan_bw = I.plans_bw[c]
+    ubuf = I.bufs[c]
+    uf = I.bufs_f[c]
+    w = I.w[c]
 
-    # First velocity component
-    let c = 1
-        U = I.U[c]
-        u = v[c]
-        k = ks[c]
+    @assert k[1] == 0
+    Nk = length(k)
 
-        @assert k[1] == 0
-        Nk = length(k)
+    Ns = size(w)
+    @assert length(ubuf) == size(u, c) == Ns[c]
 
-        plan_fw = I.plans_fw[c]
-        plan_bw = I.plans_bw[c]
-        ubuf = I.bufs[c]
-        uf = I.bufs_f[c]
+    Nc, Nother = (c === 1) ? (Ns[1], Ns[2]) : (Ns[2], Ns[1])
 
-        for j = 1:Ny
-            for i = 1:Nx
-                ubuf[i] = u[i, j]
-            end
-            mul!(uf, plan_fw, ubuf)  # apply FFT
-
-            # Copy mean value and then set it to zero.
-            # Note: the mean value must be normalised by the input data length.
-            U[j] = Real(uf[1]) / Nx
-            uf[1] = 0
-
-            for i = 2:Nk
-                uf[i] /= im * k[i]  # w(k) -> w(k) / ik
-            end
-
-            mul!(ubuf, plan_bw, uf)  # apply inverse FFT
-            for i = 1:Nx
-                I.w[1][i, j] = ubuf[i]
-            end
+    for j = 1:Nother
+        for i = 1:Nc
+            I = (c === 1) ? CartesianIndex((i, j)) : CartesianIndex((j, i))
+            ubuf[i] = u[I]
         end
-    end
+        mul!(uf, plan_fw, ubuf)  # apply FFT
 
-    # Second velocity component
-    let c = 2
-        U = I.U[2]
-        u = v[2]
-        k = ks[2]
+        # Copy mean value and then set it to zero.
+        # Note: the mean value must be normalised by the input data length.
+        U[j] = Real(uf[1]) / Nc
+        uf[1] = 0
 
-        @assert k[1] == 0
-        Nk = length(k)
+        for i = 2:Nk
+            uf[i] /= im * k[i]  # w(k) -> w(k) / ik
+        end
 
-        plan_fw = I.plans_fw[c]
-        plan_bw = I.plans_bw[c]
-        ubuf = I.bufs[c]
-        uf = I.bufs_f[c]
-
-        for i = 1:Nx
-            for j = 1:Ny
-                ubuf[j] = u[i, j]
-            end
-            mul!(uf, plan_fw, ubuf)
-
-            U[i] = Real(uf[1]) / Ny
-            uf[1] = 0
-
-            for j = 2:Nk
-                uf[j] /= im * k[j]  # w(k) -> w(k) / ik
-            end
-
-            mul!(ubuf, plan_bw, uf)  # apply inverse FFT
-            for j = 1:Ny
-                I.w[2][i, j] = ubuf[j]
-            end
+        mul!(ubuf, plan_bw, uf)  # apply inverse FFT
+        for i = 1:Nc
+            I = (c === 1) ? CartesianIndex((i, j)) : CartesianIndex((j, i))
+            w[I] = ubuf[i]
         end
     end
 
