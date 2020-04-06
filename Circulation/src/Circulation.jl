@@ -3,7 +3,6 @@ module Circulation
 using FFTW
 using HDF5
 using LinearAlgebra: mul!
-using ProgressMeter
 using TimerOutputs
 
 using GPFields

@@ -46,7 +46,7 @@ uuid = "d5fb7624-851a-54ee-a528-d3f3bac0b4a0"
 version = "0.2.3"
 
 [[Circulation]]
-deps = ["FFTW", "GPFields", "HDF5", "LinearAlgebra", "ProgressMeter", "TimerOutputs"]
+deps = ["FFTW", "GPFields", "HDF5", "LinearAlgebra", "TimerOutputs"]
 path = "Circulation"
 uuid = "f9745a5e-b5bf-4554-ab79-8fb660046134"
 version = "0.1.0"

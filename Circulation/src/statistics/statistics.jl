@@ -243,16 +243,18 @@ function analyse!(stats::StatsDict, orientation::Val, gp::ParamsGP{D},
               for t = 1:Nth]
     stats_t = [zero(stats) for t = 1:Nth]
 
-    # Progress metre
-    progress = let s = orientation_str(orientation)
+    let s = orientation_str(orientation)
         println(stderr)
-        @info "Analysing slices $slices along $s"
-        Progress(length(slices), desc="Slice($s): ")
+        @info "Analysing slices $slices along $s..."
     end
 
     Threads.@threads for s in slices
         t = Threads.threadid()
         F = fields[t]
+
+        if t == 1
+            @info "  Thread 1: slice $s"
+        end
 
         # Load ψ at selected slice.
         slice = make_slice(gp.dims, orientation, s)
@@ -262,8 +264,6 @@ function analyse!(stats::StatsDict, orientation::Val, gp::ParamsGP{D},
             stats_t[t], slice, gp, F, timer, data_params, eps_vel,
             (with_p, with_vreg, with_v)
         )
-
-        next!(progress)
     end
 
     @timeit to "reduce!" reduce!(stats, stats_t)
