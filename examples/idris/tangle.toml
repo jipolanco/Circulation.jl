@@ -1,0 +1,48 @@
+[fields]
+# data_directory = "/gpfsdswork/projects/rech/rhl/uxs76mg/GP/NLPot/1024/OUTPUTS/fields"
+data_directory = "$JOBSCRATCH/fields"
+data_index = 100
+N = [1024, 1024, 1024]
+
+[output]
+# Statistics are saved in HDF5 format.
+statistics = "tangle_1024.h5"
+
+[physics]
+c = 1.0
+nxi = 1.5
+
+[circulation]
+# Maximum number of slices per orientation to analyse.
+# If 0 (default), all available slices are analysed.
+# max_slices = 120
+
+# For "correcting" velocity near vortices (0 for no correction).
+# epsilon_velocity = 1e-10
+epsilon_velocity = 0
+
+    [circulation.loops]
+    # Type of selection of integer loop size:
+    #   - "list": array or range of sizes (see `sizes` option).
+    #   - "log":  logarithmically distributed sizes (see `log_base` option).
+    selection_type = "log"
+
+    # List of integer loop sizes if selection_type = "list".
+    # The three following examples are accepted.
+    # sizes = 4                   # a. single loop size
+    # sizes = "2:2:10"            # b. range of sizes
+    # sizes = [1, 2, 4, 8, 16]    # c. list of sizes
+    sizes = [1, 2, 4, 8, 16, 32, 64]
+
+    # Logarithmic base if selection_type = "log".
+    # Sizes will be of the form `round(log_base^n)` for `n >= 0` integer.
+    # Repeated values will be removed.
+    log_base = 1.1
+
+    [circulation.statistics.moments]
+    p_max = 20  # maximum exponent (should be even)
+
+    [circulation.statistics.histogram]
+    num_bin_edges = 8100  # number of bin edges; should be even so that the
+                          # zero value falls inside a bin
+    max_kappa = 40.5  # max value in histogram (in units of kappa)
