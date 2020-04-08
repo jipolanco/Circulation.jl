@@ -104,3 +104,10 @@ with h5py.File('filename.h5', 'r') as ff:
     g = ff['/Circulation/Velocity/Histogram']
     hist = g['hist'][:, :]
 ```
+
+### Running on a cluster
+
+See the example files in [`examples/idris`](examples/idris), which include a
+SLURM submission script and a sample parameter file used in the Jean-Zay
+cluster.
+These files should be modified for Occigen!
