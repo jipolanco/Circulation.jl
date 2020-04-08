@@ -1,7 +1,7 @@
 [fields]
 # Path to data. Note that environment variables are allowed.
 data_directory = "$HOME/Dropbox/circulation/data/tangle/256"
-data_index = 1
+data_index = 1       # timestep
 N = [256, 256, 256]  # resolution: can be 2D or 3D
 
 # data_directory = "~/Work/simulation_data/GP/circulation/tangle/1024"
@@ -12,10 +12,14 @@ N = [256, 256, 256]  # resolution: can be 2D or 3D
 c = 1.0
 nxi = 1.5
 
+[output]
+# Statistics are saved in HDF5 format.
+statistics = "tangle_256.h5"
+
 [circulation]
 # Maximum number of slices per orientation to analyse.
 # If 0 (default), all available slices are analysed.
-max_slices = 8
+max_slices = 0
 
 # For "correcting" velocity near vortices (0 for no correction).
 # epsilon_velocity = 1e-10
@@ -46,7 +50,3 @@ epsilon_velocity = 0
     num_bin_edges = 4000  # number of bin edges; should be even so that the
                           # zero value falls inside a bin
     max_kappa = 30.5  # max value in histogram (in units of kappa)
-
-[output]
-# Statistics are saved in HDF5 format.
-statistics = "tangle_256.h5"
