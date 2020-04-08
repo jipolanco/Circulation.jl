@@ -26,8 +26,11 @@ end
 
 # Get moment exponents.
 function exponents(s::Moments; odd=false)
-    N = odd ? s.Nm_odd : s.Nm
-    1:N
+    if odd
+        range(1, length=s.Nm_odd, step=2)
+    else
+        range(1, length=s.Nm, step=1)
+    end
 end
 
 Base.eltype(::Type{<:Moments{T}}) where {T} = T
