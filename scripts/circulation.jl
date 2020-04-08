@@ -83,7 +83,7 @@ function parse_loop_sizes(d::Dict, dims::Dims)
         return parse_loop_sizes(d["sizes"])
     elseif type == "log"
         base = d["log_base"] :: Real
-        Rmax = min(dims...) / 2  # max loop size is half resolution N/2
+        Rmax = min(dims...) - 1  # max loop size is N - 1
         Nmax = floor(Int, log(base, Rmax))
         return unique(round.(Int, base .^ (0:Nmax)))
     end
