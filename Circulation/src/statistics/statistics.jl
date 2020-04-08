@@ -255,6 +255,7 @@ function analyse!(stats::StatsDict, orientation::Val, gp::ParamsGP{D},
 
         if t == 1
             @info "  Thread 1: slice $s/$slices_per_thread"
+            flush(stderr)
         end
 
         # Load ψ at selected slice.

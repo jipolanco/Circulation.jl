@@ -19,7 +19,7 @@ statistics = "tangle_256.h5"
 [circulation]
 # Maximum number of slices per orientation to analyse.
 # If 0 (default), all available slices are analysed.
-max_slices = 0
+max_slices = 8
 
 # For "correcting" velocity near vortices (0 for no correction).
 # epsilon_velocity = 1e-10

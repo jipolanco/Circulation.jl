@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import h5py
 from collections import OrderedDict
 
-STATS_FILE = 'tangle_1024.h5'
+STATS_FILE = 'tangle_256.h5'
 
 MOMENTS_FROM_HISTOGRAM = False
 
@@ -28,13 +28,20 @@ QUANTITIES = OrderedDict(
 def plot_pdf(ax: plt.Axes, g: h5py.Group, params, moment=0, plot_kw={}):
     rs = g.parent['loop_sizes'][:] / params['nxi']  # r / ξ
     Nr = rs.size
-    bins = g['bin_edges'][:] / params['kappa']  # Γ / κ
+    kappa = params['kappa']
+    bins = g['bin_edges'][:] / kappa  # Γ / κ
     x = (bins[:-1] + bins[1:]) / 2
     bin_size = bins[1] - bins[0]  # assume linear bins!
+    mins = g['minimum'][:] / kappa
+    maxs = g['maximum'][:] / kappa
 
     for r in range(1, Nr, 5):
         Ns = g['total_samples'][r]
         pdf = g['hist'][r, :] / (Ns * bin_size)
+
+        if mins[r] < bins[0] or maxs[r] > bins[-1]:
+            print('WARNING: found Γ outside of histogram. Min/max =',
+                  (mins[r], maxs[r]))
 
         # PDF integral, should be close to 1.
         # It can be a bit smaller, if there are events falling outside of the
@@ -53,10 +60,14 @@ def plot_pdf(ax: plt.Axes, g: h5py.Group, params, moment=0, plot_kw={}):
                 **plot_kw)
 
 
-def load_moments(g: h5py.Group):
-    Mabs = g['M_abs'][:, :]  # [Nr, Np]
-    ps = g['p_abs'][:]  # moment exponents [Np]
-    return ps, Mabs
+def load_moments(g: h5py.Group, odd=False):
+    if odd:
+        M = np.abs(g['M_odd'][:, :])
+        ps = g['p_odd'][:]  # moment exponents [Np]
+    else:
+        M = g['M_abs'][:, :]  # [Nr, Np]
+        ps = g['p_abs'][:]  # moment exponents [Np]
+    return ps, M
 
 
 def moments_from_histogram(g: h5py.Group):
@@ -82,22 +93,25 @@ def moments_from_histogram(g: h5py.Group):
 
 
 def plot_moments(ax: plt.Axes, g: h5py.Group, params, logdiff=False,
-                 plot_kw={}):
+                 pmax=100, plot_kw={}):
     if g.name.endswith('Moments'):
         ps, Mabs = load_moments(g)
     elif g.name.endswith('Histogram'):
         ps, Mabs = moments_from_histogram(g)
 
-    rs = g.parent['loop_sizes'][:-1]  # we skip the last loop size...
-    Mabs = Mabs[:-1, :]
+    rs = g.parent['loop_sizes'][:]  # [Nr]
+    Mabs = Mabs[:, :]  # [Nr, Np]
     Np = ps.size
 
     rs = rs / params['nxi']  # r / ξ
     kappa = params['kappa']
     rl = np.log(rs)
 
-    for i in range(1, Np, 2):
+    for i in range(1, Np, 1):
         p = ps[i]
+        if p > pmax:
+            continue
+
         M = Mabs[:, i]
 
         if logdiff:
@@ -133,14 +147,14 @@ with h5py.File(STATS_FILE, 'r') as ff:
         g = g_circ[key]
 
         ax = axes[0, j]
-        moment = 20
+        moment = 8
         plot_pdf(ax, g['Histogram'], params, moment=moment)
         ax.set_yscale('log')
         ax.set_title(val['name'])
         ax.set_xlabel('$Γ / κ$')
         if j == 0:
             gamma = r'\left( Γ / κ \right)'
-            s = '' if moment == 0 else f'{gamma}^{moment} \\,'
+            s = '' if moment == 0 else f'{gamma}^{{{moment}}} \\,'
             ax.set_ylabel(f'${s} P{gamma}$')
         if j == 1:
             ax.legend(fontsize='x-small', ncol=1, title='$r / ξ$')
@@ -154,11 +168,9 @@ with h5py.File(STATS_FILE, 'r') as ff:
             ax.set_xscale('log')
             if logdiff:
                 ylab = r'$\mathrm{d} \, \log ⟨ |Γ|^p ⟩ / \mathrm{d} \, \log r$'
-                ax.set_ylim(-5, 38)
             else:
                 ax.set_yscale('log')
                 ylab = r'$⟨ |Γ|^p ⟩ / κ^p$'
-                ax.set_ylim(1e-20, 1e60)
             ax.set_xlabel('$r / ξ$')
             if j == 0:
                 ax.set_ylabel(ylab)
