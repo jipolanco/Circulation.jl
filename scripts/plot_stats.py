@@ -9,6 +9,7 @@ from collections import OrderedDict
 STATS_FILE = 'tangle_256.h5'
 
 MOMENTS_FROM_HISTOGRAM = False
+MOMENTS_FRACTIONAL = False  # show fractional moments?
 
 print('Loading file:', STATS_FILE)
 
@@ -60,13 +61,19 @@ def plot_pdf(ax: plt.Axes, g: h5py.Group, params, moment=0, plot_kw={}):
                 **plot_kw)
 
 
-def load_moments(g: h5py.Group, odd=False):
+def load_moments(g: h5py.Group, odd=False, fractional=False):
     if odd:
         M = np.abs(g['M_odd'][:, :])
         ps = g['p_odd'][:]  # moment exponents [Np]
     else:
         M = g['M_abs'][:, :]  # [Nr, Np]
         ps = g['p_abs'][:]  # moment exponents [Np]
+        if fractional and 'M_frac' in g:
+            # Add fractional moments if they were computed.
+            Mf = g['M_frac'][:, :]  # [Nr, Np_frac]
+            pf = g['p_frac'][:]     # [Np_frac]
+            M = np.append(Mf, M, axis=1)
+            ps = np.append(pf, ps)
     return ps, M
 
 
@@ -93,9 +100,9 @@ def moments_from_histogram(g: h5py.Group):
 
 
 def plot_moments(ax: plt.Axes, g: h5py.Group, params, logdiff=False,
-                 pmax=100, plot_kw={}):
+                 pskip=1, fractional=False, pmax=100, plot_kw={}):
     if g.name.endswith('Moments'):
-        ps, Mabs = load_moments(g)
+        ps, Mabs = load_moments(g, fractional=fractional)
     elif g.name.endswith('Histogram'):
         ps, Mabs = moments_from_histogram(g)
 
@@ -107,7 +114,7 @@ def plot_moments(ax: plt.Axes, g: h5py.Group, params, logdiff=False,
     kappa = params['kappa']
     rl = np.log(rs)
 
-    for i in range(1, Np, 1):
+    for i in range(0, Np, pskip):
         p = ps[i]
         if p > pmax:
             continue
@@ -163,8 +170,12 @@ with h5py.File(STATS_FILE, 'r') as ff:
             ax = axes[i, j]
             logdiff = i == 2
             gname = 'Histogram' if MOMENTS_FROM_HISTOGRAM else 'Moments'
+            if MOMENTS_FRACTIONAL:
+                kwargs = dict(fractional=True, pmax=4, pskip=2)
+            else:
+                kwargs = dict()
             plot_moments(ax, g[gname], params, logdiff=logdiff,
-                         plot_kw=dict(marker='x'))
+                         plot_kw=dict(marker='x'), **kwargs)
             ax.set_xscale('log')
             if logdiff:
                 ylab = r'$\mathrm{d} \, \log ⟨ |Γ|^p ⟩ / \mathrm{d} \, \log r$'
