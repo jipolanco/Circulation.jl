@@ -67,11 +67,14 @@ function parse_params_circulation(d::Dict, dims)
     moments = stats["moments"]
     hist = stats["histogram"]
 
+    Nfrac = get(moments, "N_fractional", 0)
+
     (
         eps_velocity = d["epsilon_velocity"] :: Real,
         max_slices = max_slices,
         loop_sizes = loop_sizes,
         moments_pmax = moments["p_max"] :: Int,
+        moments_Nfrac = Nfrac == 0 ? nothing : Nfrac,
         hist_Nedges = hist["num_bin_edges"] :: Int,
         hist_max_kappa = Float64(hist["max_kappa"]),
     )
@@ -132,7 +135,11 @@ function main(P::NamedTuple)
         edges = LinRange(-M * κ, M * κ, Nedges)
 
         Circulation.init_statistics(
-            loop_sizes, num_moments=par.moments_pmax, hist_edges=edges)
+            loop_sizes,
+            num_moments=par.moments_pmax,
+            moments_Nfrac=par.moments_Nfrac,
+            hist_edges=edges,
+        )
     end
 
     # First run for precompilation (-> accurate timings)

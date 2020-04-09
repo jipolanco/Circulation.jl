@@ -30,10 +30,11 @@ Construct and initialise statistics.
 function CirculationStats(
         loop_sizes;
         num_moments=20,
+        moments_Nfrac=nothing,
         hist_edges=LinRange(-10, 10, 42),
     )
     Nr = length(loop_sizes)
-    M = Moments(num_moments, Nr, Float64)
+    M = Moments(num_moments, Nr, Float64; Nfrac=moments_Nfrac)
     H = Histogram(hist_edges, Nr, Int)
     CirculationStats(Nr, loop_sizes, M, H)
 end

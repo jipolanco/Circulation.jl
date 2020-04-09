@@ -4,6 +4,7 @@ using FFTW
 using HDF5
 using LinearAlgebra: mul!
 using TimerOutputs
+using OffsetArrays: OffsetArray
 
 using GPFields
 

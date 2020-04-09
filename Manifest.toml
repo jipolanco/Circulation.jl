@@ -46,7 +46,7 @@ uuid = "d5fb7624-851a-54ee-a528-d3f3bac0b4a0"
 version = "0.2.3"
 
 [[Circulation]]
-deps = ["FFTW", "GPFields", "HDF5", "LinearAlgebra", "TimerOutputs"]
+deps = ["FFTW", "GPFields", "HDF5", "LinearAlgebra", "OffsetArrays", "TimerOutputs"]
 path = "Circulation"
 uuid = "f9745a5e-b5bf-4554-ab79-8fb660046134"
 version = "0.1.0"
@@ -131,6 +131,11 @@ uuid = "d6f4376e-aef5-505a-96c1-9c027394607a"
 
 [[Mmap]]
 uuid = "a63ad114-7e13-5084-954f-fe012c677804"
+
+[[OffsetArrays]]
+git-tree-sha1 = "930db8ef90483570107f2396b1ffc6680f08e8b7"
+uuid = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
+version = "1.0.4"
 
 [[OrderedCollections]]
 deps = ["Random", "Serialization", "Test"]
