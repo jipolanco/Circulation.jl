@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import h5py
 from collections import OrderedDict
 
-STATS_FILE = 'tangle_256.h5'
+STATS_FILE = 'tangle_1024.h5'
 
 MOMENTS_FROM_HISTOGRAM = False
 MOMENTS_FRACTIONAL = False  # show fractional moments?
@@ -33,14 +33,18 @@ def plot_pdf(ax: plt.Axes, g: h5py.Group, params, moment=0, plot_kw={}):
     bins = g['bin_edges'][:] / kappa  # Γ / κ
     x = (bins[:-1] + bins[1:]) / 2
     bin_size = bins[1] - bins[0]  # assume linear bins!
-    mins = g['minimum'][:] / kappa
-    maxs = g['maximum'][:] / kappa
+
+    check_minmax = 'minimum' in g
+
+    if check_minmax:
+        mins = g['minimum'][:] / kappa
+        maxs = g['maximum'][:] / kappa
 
     for r in range(1, Nr, 5):
         Ns = g['total_samples'][r]
         pdf = g['hist'][r, :] / (Ns * bin_size)
 
-        if mins[r] < bins[0] or maxs[r] > bins[-1]:
+        if check_minmax and (mins[r] < bins[0] or maxs[r] > bins[-1]):
             print('WARNING: found Γ outside of histogram. Min/max =',
                   (mins[r], maxs[r]))
 
@@ -110,6 +114,11 @@ def plot_moments(ax: plt.Axes, g: h5py.Group, params, logdiff=False,
     Mabs = Mabs[:, :]  # [Nr, Np]
     Np = ps.size
 
+    # Get rs index corresponding to a loop size roughly half the size of the
+    # domain (a bit less, actually).
+    Nhalf = params['dims'][0] // 2
+    rmid_idx = np.searchsorted(rs, Nhalf) - 2
+
     rs = rs / params['nxi']  # r / ξ
     kappa = params['kappa']
     rl = np.log(rs)
@@ -125,6 +134,9 @@ def plot_moments(ax: plt.Axes, g: h5py.Group, params, logdiff=False,
             x = (rs[1:] + rs[:-1]) / 2
             Ml = np.log(M)
             M = (Ml[1:] - Ml[:-1])  / (rl[1:] - rl[:-1])
+            # Skip largest loops (periodicity effects...)
+            x = x[:rmid_idx]
+            M = M[:rmid_idx]
         else:
             x = rs
             M[:] /= kappa **p
@@ -137,9 +149,48 @@ def output_filename(filein_h5):
     return filein_h5.replace('.h5', f'{suffix}.svg')
 
 
+def plot_three_rows(axes, gbase: h5py.Group, params, vel_dict, j):
+    ax = axes[0]
+    moment = 8
+    plot_pdf(ax, g['Histogram'], params, moment=moment)
+    ax.set_yscale('log')
+    ax.set_title(vel_dict['name'])
+    ax.set_xlabel('$Γ / κ$')
+
+    if j == 0:
+        gamma = r'\left( Γ / κ \right)'
+        s = '' if moment == 0 else f'{gamma}^{{{moment}}} \\,'
+        ax.set_ylabel(f'${s} P{gamma}$')
+    if j == 1:
+        ax.legend(fontsize='x-small', ncol=1, title='$r / ξ$')
+
+    for i in (1, 2):
+        ax = axes[i]
+        logdiff = i == 2
+        gname = 'Histogram' if MOMENTS_FROM_HISTOGRAM else 'Moments'
+        if MOMENTS_FRACTIONAL:
+            kwargs = dict(fractional=True, pmax=4, pskip=2)
+        else:
+            kwargs = dict()
+        plot_moments(ax, g[gname], params, logdiff=logdiff,
+                     plot_kw=dict(marker='x'), **kwargs)
+        ax.set_xscale('log')
+        if logdiff:
+            ylab = r'$\mathrm{d} \, \log ⟨ |Γ|^p ⟩ / \mathrm{d} \, \log r$'
+        else:
+            ax.set_yscale('log')
+            ylab = r'$⟨ |Γ|^p ⟩ / κ^p$'
+        ax.set_xlabel('$r / ξ$')
+        if j == 0:
+            ax.set_ylabel(ylab)
+        if j == 1:
+            ax.legend(fontsize='x-small', ncol=2)
+
+
 with h5py.File(STATS_FILE, 'r') as ff:
     g_params = ff['/ParamsGP']
     params = dict(
+        dims=g_params['dims'][:],  # [Nx, Ny, Nz]
         kappa=g_params['kappa'][()],
         xi=g_params['xi'][()],
         nxi=g_params['nxi'][()],
@@ -152,41 +203,7 @@ with h5py.File(STATS_FILE, 'r') as ff:
 
     for j, (key, val) in enumerate(QUANTITIES.items()):
         g = g_circ[key]
-
-        ax = axes[0, j]
-        moment = 8
-        plot_pdf(ax, g['Histogram'], params, moment=moment)
-        ax.set_yscale('log')
-        ax.set_title(val['name'])
-        ax.set_xlabel('$Γ / κ$')
-        if j == 0:
-            gamma = r'\left( Γ / κ \right)'
-            s = '' if moment == 0 else f'{gamma}^{{{moment}}} \\,'
-            ax.set_ylabel(f'${s} P{gamma}$')
-        if j == 1:
-            ax.legend(fontsize='x-small', ncol=1, title='$r / ξ$')
-
-        for i in (1, 2):
-            ax = axes[i, j]
-            logdiff = i == 2
-            gname = 'Histogram' if MOMENTS_FROM_HISTOGRAM else 'Moments'
-            if MOMENTS_FRACTIONAL:
-                kwargs = dict(fractional=True, pmax=4, pskip=2)
-            else:
-                kwargs = dict()
-            plot_moments(ax, g[gname], params, logdiff=logdiff,
-                         plot_kw=dict(marker='x'), **kwargs)
-            ax.set_xscale('log')
-            if logdiff:
-                ylab = r'$\mathrm{d} \, \log ⟨ |Γ|^p ⟩ / \mathrm{d} \, \log r$'
-            else:
-                ax.set_yscale('log')
-                ylab = r'$⟨ |Γ|^p ⟩ / κ^p$'
-            ax.set_xlabel('$r / ξ$')
-            if j == 0:
-                ax.set_ylabel(ylab)
-            if j == 1:
-                ax.legend(fontsize='x-small', ncol=2)
+        plot_three_rows(axes[:, j], g, params, val, j)
 
 
     fname = output_filename(STATS_FILE)
