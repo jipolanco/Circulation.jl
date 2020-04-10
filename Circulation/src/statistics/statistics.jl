@@ -238,7 +238,7 @@ function analyse!(stats::StatsDict, orientation::Val, gp::ParamsGP{D},
     with_p = CirculationFields.Momentum in stats_keys
 
     Nth = Threads.nthreads()
-    slices_per_thread = ceil(Int, Nslices / Nth)
+    slices_per_thread = cld(Nslices, Nth)
 
     # Allocate arrays (one per thread).
     fields = [allocate_stats_fields((Ni, Nj), (Li, Lj), with_v || with_vreg)
