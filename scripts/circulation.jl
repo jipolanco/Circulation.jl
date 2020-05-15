@@ -136,6 +136,11 @@ function main(P::NamedTuple)
 
         Circulation.init_statistics(
             loop_sizes,
+            which=(
+                CirculationFields.Velocity,
+                CirculationFields.RegVelocity,
+                # CirculationFields.Momentum,
+            ),
             num_moments=par.moments_pmax,
             moments_Nfrac=par.moments_Nfrac,
             hist_edges=edges,
