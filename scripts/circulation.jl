@@ -41,13 +41,18 @@ end
 
 function parse_params_fields(d::Dict)
     dims = d["N"] :: Vector{Int}
-    if length(dims) ∉ (2, 3)
+    D = length(dims)
+    if D ∉ (2, 3)
         error("`N` parameter must be a vector of 2 or 3 integers")
     end
+    L = get(d, "L_2pi", ones(D)) .* 2pi
+    res = get(d, "resampling_power", 0)
     (
         data_dir = replace_env(expanduser(d["data_directory"] :: String)),
         data_idx = d["data_index"] :: Int,
-        dims = tuple(dims...),
+        dims = tuple(dims...) :: NTuple{D,Int},
+        L = tuple(L...) :: NTuple{D,Float64},
+        resampling_power = res :: Int,
     )
 end
 
@@ -123,6 +128,7 @@ end
 function main(P::NamedTuple)
     params = ParamsGP(
         P.fields.dims,    # resolution: (Nx, Ny) or (Nx, Ny, Nz)
+        L = P.fields.L,
         c = P.physics.c,
         nxi = P.physics.nxi,
     )
@@ -168,6 +174,7 @@ function main(P::NamedTuple)
         eps_vel=P.circulation.eps_velocity,
         to=to,
         max_slices=P.circulation.max_slices,
+        resampling_power=P.fields.resampling_power,
     )
 
     println(to)
@@ -191,10 +198,15 @@ function main()
     end
 
     fields = parse_params_fields(p["fields"])
+    circ = parse_params_circulation(p["circulation"], fields.dims)
+
+    # Amplify loop sizes by the field refinement level.
+    # This means that the physical loop sizes stay the same.
+    circ.loop_sizes .*= 2^fields.resampling_power
 
     params = (
         fields = fields,
-        circulation = parse_params_circulation(p["circulation"], fields.dims),
+        circulation = circ,
         physics = parse_params_physics(p["physics"]),
         output = parse_params_output(p["output"]),
     )
