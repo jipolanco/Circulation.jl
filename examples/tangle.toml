@@ -9,13 +9,14 @@ L_2pi = [1, 1, 1]    # domain size in multiples of 2π (default is [1, 1, 1])
 # data_index = 100
 # N = [1024, 1024, 1024]
 
-# Refinement degree of the wave-function field ψ (default is 0).
-# If this is positive, the input field is resampled into a finer grid with
-# `2^resampling_power` times the original points.
-# For instance, if Nx = 256 in the original grid, and resampling_power = 3,
-# then the grid is amplified to Nx' = 2^3 * 256 = 2048.
-# This is done by zero-padding ψ in Fourier space.
-resampling_power = 1
+# Refinement factor of the wave-function field ψ (default is 1).
+# Must be a positive integer. In particular, downsampling is not allowed.
+# If greater than 1, the input field is resampled into a finer grid with
+# `resampling_factor` times the original points.
+# The resampling is done by zero-padding ψ in Fourier space.
+# Note that the loop sizes defined in circulation.loops refer to the original
+# grid resolution, and not the resampled one.
+resampling_factor = 2
 
 [physics]
 c = 1.0

@@ -46,13 +46,13 @@ function parse_params_fields(d::Dict)
         error("`N` parameter must be a vector of 2 or 3 integers")
     end
     L = get(d, "L_2pi", ones(D)) .* 2pi
-    res = get(d, "resampling_power", 0)
+    res = get(d, "resampling_factor", 1)
     (
         data_dir = replace_env(expanduser(d["data_directory"] :: String)),
         data_idx = d["data_index"] :: Int,
         dims = tuple(dims...) :: NTuple{D,Int},
         L = tuple(L...) :: NTuple{D,Float64},
-        resampling_power = res :: Int,
+        resampling_factor = res :: Int,
     )
 end
 
@@ -174,7 +174,7 @@ function main(P::NamedTuple)
         eps_vel=P.circulation.eps_velocity,
         to=to,
         max_slices=P.circulation.max_slices,
-        resampling_power=P.fields.resampling_power,
+        resampling_factor=P.fields.resampling_factor,
     )
 
     println(to)
@@ -202,7 +202,7 @@ function main()
 
     # Amplify loop sizes by the field refinement level.
     # This means that the physical loop sizes stay the same.
-    circ.loop_sizes .*= 2^fields.resampling_power
+    circ.loop_sizes .*= fields.resampling_factor
 
     params = (
         fields = fields,
