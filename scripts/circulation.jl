@@ -9,6 +9,8 @@ using HDF5
 
 import Base.Threads
 
+const DEFAULT_CONFIG = joinpath(@__DIR__, "..", "examples", "tangle.toml")
+
 const USAGE =
 """
 Usage: julia $(basename(@__FILE__)) CONFIG_FILE.toml
@@ -20,19 +22,20 @@ file."""
 
 function parse_commandline()
     help = any(("--help", "-h") .∈ Ref(ARGS))
-    if isempty(ARGS) || help
+    if help
         println(USAGE)
-        exit(help ? 0 : 1)
+        exit(0)
     end
-    config_file = ARGS[1]
+    config_file = get(ARGS, 1, DEFAULT_CONFIG)
     Dict("parameter-file" => config_file)
 end
 
 function params_from_file(filename)
+    filename_rel = relpath(filename)
     if !isfile(filename)
-        error("parameter file not found: $filename")
+        error("parameter file not found: $filename_rel")
     end
-    @info "Loading parameters from $filename"
+    @info "Loading parameters from $filename_rel"
     TOML.parsefile(filename)
 end
 
