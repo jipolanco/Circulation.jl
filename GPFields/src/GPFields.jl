@@ -139,12 +139,13 @@ These should be generated using `create_fft_plans_1d!`.
 This is not only good for performance, but it also avoids problems when using
 threads.
 """
-function compute_momentum!(p::NTuple{D,<:RealArray},
+function compute_momentum!(
+        p::NTuple{D,<:RealArray},
         ψ::ComplexArray{T,D},
         gp::ParamsGP{D};
         buf::ComplexArray{T,D} = similar(ψ),
         fft_plans = create_fft_plans_1d!(ψ),
-        ) where {T,D}
+    ) where {T,D}
     @assert all(size(pj) === size(ψ) for pj in p)
     if size(buf) !== size(ψ)
         throw(DimensionMismatch(
@@ -168,6 +169,7 @@ function compute_momentum!(p::NTuple{D,<:RealArray},
 
         copy!(dψ, ψ)
         plans.fw * dψ  # apply in-place FFT
+
         @inbounds for I in CartesianIndices(dψ)
             kloc = kn[I[n]]
             dψ[I] *= im * kloc
@@ -216,6 +218,79 @@ Allocate and compute density from ψ.
 function compute_density(ψ::ComplexArray{T}) where {T}
     ρ = similar(ψ, T)
     compute_density!(ρ, ψ) :: RealArray
+end
+
+"""
+    resample_field_fourier!(
+        dest::AbstractArray, src::AbstractArray,
+        params_src::ParamsGP; destroy_input = true,
+    )
+
+Resample complex field by zero-padding in Fourier space.
+
+The resampling factor is determined from the dimensions of the two arrays.
+It must be the same along all dimensions.
+
+For now, the resampling factor must also be a non-negative power of two.
+
+Resampling is performed in Fourier space.
+No transforms are performed in this function, meaning that the input and output
+are also in Fourier space.
+"""
+function resample_field_fourier!(dst::ComplexArray{T,N}, src::ComplexArray{T,N},
+                                 p_src::ParamsGP{N}) where {T,N}
+    if size(src) === size(dst)
+        if src !== dst
+            copy!(dst, src)
+        end
+        return dst
+    end
+
+    p_dst = ParamsGP(p_src, dims=size(dst))
+
+    ksrc = get_wavenumbers(p_src)
+    kdst = get_wavenumbers(p_dst)
+
+    kmap = _wavenumber_map.(ksrc, kdst)
+
+    # 1. Set everything to zero.
+    fill!(dst, 0)
+
+    # 2. Copy all modes in src.
+    for I in CartesianIndices(src)
+        is = Tuple(I)
+        js = getindex.(kmap, is)
+        dst[js...] = src[I]
+    end
+
+    dst
+end
+
+# Maps ki index to ko index, such that ki[n] = ko[kmap[n]].
+function _wavenumber_map(ki::Frequencies, ko::Frequencies)
+    Base.require_one_based_indexing.((ki, ko))
+    Ni = length(ki)
+    No = length(ko)
+    if Ni > No
+        error("downscaling (Fourier truncation) is not allowed")
+    end
+    if any(isodd.((Ni, No)))
+        error("data length must be even (got $((Ni, No)))")
+    end
+    if ki[Ni] > 0 || ko[No] > 0
+        error("negative wave numbers must be included")
+    end
+    h = Ni >> 1
+    kmap = similar(ki, Int)
+    for n = 1:h
+        kmap[n] = n
+        kmap[Ni - n + 1] = No - n + 1
+    end
+    # Verification
+    for n in eachindex(ki)
+        @assert ki[n] ≈ ko[kmap[n]]
+    end
+    kmap
 end
 
 end

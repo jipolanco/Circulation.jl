@@ -3,10 +3,20 @@
 data_directory = "$HOME/Dropbox/circulation/data/tangle/256"
 data_index = 1       # timestep
 N = [256, 256, 256]  # resolution: can be 2D or 3D
+L_2pi = [1, 1, 1]    # domain size in multiples of 2π (default is [1, 1, 1])
 
 # data_directory = "~/Work/simulation_data/GP/circulation/tangle/1024"
 # data_index = 100
 # N = [1024, 1024, 1024]
+
+# Refinement factor of the wave-function field ψ (default is 1).
+# Must be a positive integer. In particular, downsampling is not allowed.
+# If greater than 1, the input field is resampled into a finer grid with
+# `resampling_factor` times the original points.
+# The resampling is done by zero-padding ψ in Fourier space.
+# Note that the loop sizes defined in circulation.loops refer to the original
+# grid resolution, and not the resampled one.
+resampling_factor = 2
 
 [physics]
 c = 1.0
@@ -41,16 +51,16 @@ epsilon_velocity = 0
     # Logarithmic base if selection_type = "log".
     # Sizes will be of the form `round(log_base^n)` for `n >= 0` integer.
     # Repeated values will be removed.
-    log_base = 1.1
+    log_base = 1.4
 
     [circulation.statistics.moments]
-    p_max = 16  # maximum exponent (should be even)
+    p_max = 10  # maximum exponent (should be even)
 
     # Number of fractional exponents to compute in 0 <= p < 1.
     # Note that negative exponents will also be computed.
     # For example, if this is 10, the exponents in -0.9:0.1:0.9 will be
     # considered. Default is 0 (no fractional exponents).
-    N_fractional = 10
+    # N_fractional = 10
 
     [circulation.statistics.histogram]
     num_bin_edges = 4000  # number of bin edges; should be even so that the

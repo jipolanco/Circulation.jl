@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import h5py
 from collections import OrderedDict
 
-STATS_FILE = 'tangle_1024.h5'
+STATS_FILE = 'tangle_256.h5'
 
 MOMENTS_FROM_HISTOGRAM = False
 MOMENTS_FRACTIONAL = False  # show fractional moments?
@@ -20,9 +20,9 @@ QUANTITIES = OrderedDict(
     RegVelocity = {
         'name': 'Regularised velocity',
     },
-    Momentum = {
-        'name': 'Momentum',
-    },
+    # Momentum = {
+    #     'name': 'Momentum',
+    # },
 )
 
 
