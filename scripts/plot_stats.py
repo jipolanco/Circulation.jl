@@ -5,8 +5,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 import h5py
 from collections import OrderedDict
+import sys
 
-STATS_FILE = 'tangle_256.h5'
+if len(sys.argv) > 1:
+    STATS_FILE = sys.argv[1]
+else:
+    STATS_FILE = 'tangle_1024.h5'
 
 MOMENTS_FROM_HISTOGRAM = False
 MOMENTS_FRACTIONAL = False  # show fractional moments?
@@ -151,7 +155,7 @@ def output_filename(filein_h5):
 
 def plot_three_rows(axes, gbase: h5py.Group, params, vel_dict, j):
     ax = axes[0]
-    moment = 8
+    moment = 0
     plot_pdf(ax, g['Histogram'], params, moment=moment)
     ax.set_yscale('log')
     ax.set_title(vel_dict['name'])

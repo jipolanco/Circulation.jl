@@ -134,7 +134,9 @@ function main(P::NamedTuple)
     )
 
     loop_sizes = P.circulation.loop_sizes
+    resampling = P.fields.resampling_factor
     @info "Loop sizes: $loop_sizes ($(length(loop_sizes)) sizes)"
+    @info "Resampling factor: $resampling"
 
     to = TimerOutput()
     stats = let par = P.circulation
@@ -153,6 +155,7 @@ function main(P::NamedTuple)
             num_moments=par.moments_pmax,
             moments_Nfrac=par.moments_Nfrac,
             hist_edges=edges,
+            resampling_factor=resampling,
         )
     end
 
@@ -174,7 +177,6 @@ function main(P::NamedTuple)
         eps_vel=P.circulation.eps_velocity,
         to=to,
         max_slices=P.circulation.max_slices,
-        resampling_factor=P.fields.resampling_factor,
     )
 
     println(to)
@@ -199,10 +201,6 @@ function main()
 
     fields = parse_params_fields(p["fields"])
     circ = parse_params_circulation(p["circulation"], fields.dims)
-
-    # Amplify loop sizes by the field refinement level.
-    # This means that the physical loop sizes stay the same.
-    circ.loop_sizes .*= fields.resampling_factor
 
     params = (
         fields = fields,
