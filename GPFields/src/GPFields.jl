@@ -222,8 +222,7 @@ end
 
 """
     resample_field_fourier!(
-        dest::AbstractArray, src::AbstractArray,
-        params_src::ParamsGP; destroy_input = true,
+        dest::AbstractArray, src::AbstractArray, params_src::ParamsGP,
     )
 
 Resample complex field by zero-padding in Fourier space.
@@ -253,6 +252,10 @@ function resample_field_fourier!(dst::ComplexArray{T,N}, src::ComplexArray{T,N},
 
     kmap = _wavenumber_map.(ksrc, kdst)
 
+    # The coefficients are scaled by this ratio, to make sure that the
+    # normalised inverse FFT (e.g. with ifft) has the good magnitude.
+    scale = length(dst) / length(src)
+
     # 1. Set everything to zero.
     fill!(dst, 0)
 
@@ -260,7 +263,7 @@ function resample_field_fourier!(dst::ComplexArray{T,N}, src::ComplexArray{T,N},
     for I in CartesianIndices(src)
         is = Tuple(I)
         js = getindex.(kmap, is)
-        dst[js...] = src[I]
+        dst[js...] = scale * src[I]
     end
 
     dst
