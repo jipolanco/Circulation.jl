@@ -318,7 +318,7 @@ function allocate_stats_fields(Nij_input, Nij_resampled, Lij, with_v)
         ψ = ψ,
         ψ_buf = similar(ψ),
         ρ = ρ,
-        Γ = similar(ρ),
+        Γ = similar(ρ, Nij_input),
         ps = ps,
         vs = with_v ? similar.(ps) : nothing,
         I = IntegralField2D(ps[1], L=Lij),
@@ -378,9 +378,12 @@ function compute!(stats::CirculationStats, Γ, Ip, vs, to)
     # Set integral values with momentum data.
     @timeit to "prepare!" prepare!(Ip, vs)
 
+    resampling = stats.resampling_factor
+
     for (r_ind, r) in enumerate(stats.loop_sizes)
-        s = stats.resampling_factor * r  # loop size in resampled field
-        @timeit to "circulation!" circulation!(Γ, Ip, (s, s))
+        s = resampling * r  # loop size in resampled field
+        @timeit to "circulation!" circulation!(
+            Γ, Ip, (s, s), grid_step=resampling)
         @timeit to "statistics" update!(stats, Γ, r_ind; to=to)
     end
 

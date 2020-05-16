@@ -155,7 +155,7 @@ function prepare!(I::IntegralField2D, u, ::Val{c}) where {c}
 end
 
 """
-    circulation!(Γ::AbstractMatrix, I::IntegralField2D, rs)
+    circulation!(Γ::AbstractMatrix, I::IntegralField2D, rs; grid_step=1)
 
 Compute circulation on a 2D slice around loops with a fixed rectangle shape.
 
@@ -168,22 +168,26 @@ Compute circulation on a 2D slice around loops with a fixed rectangle shape.
 
 - `rs = (r_x, r_y)`: rectangle dimensions.
 
+- `grid_step`: optional parameter allowing to visit only a subset of grid
+  points. For instance, if `grid_step = 2`, one out of two grid points is
+  considered in every direction. Note that the dimensions of `Γ` must be
+  consistent with this parameter.
+
 """
 function circulation!(Γ::AbstractMatrix{<:Real},
                       I::IntegralField2D,
-                      rs::NTuple{2,Int})
-    Ns = size(I)
-    Nx, Ny = Ns
-
-    if size(Γ) != Ns
+                      rs::NTuple{2,Int};
+                      grid_step::Int = 1,
+                     )
+    if grid_step .* size(Γ) != size(I)
         throw(DimensionMismatch("incompatible size of output array"))
     end
 
     loop_base = Rectangle((0, 0), rs)
     rs_half = rs .>> 1  # half radius (truncated if rs has odd numbers...)
 
-    for j = 1:Ny, i = 1:Nx
-        x0 = (i, j) .- rs_half  # lower left corner of loop
+    for j ∈ axes(Γ, 2), i ∈ axes(Γ, 1)
+        x0 = grid_step .* (i, j) .- rs_half  # lower left corner of loop
         loop = loop_base + x0
         @inbounds Γ[i, j] = circulation(loop, I)
     end
