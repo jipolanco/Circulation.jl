@@ -104,10 +104,14 @@ Load full complex ψ(x) field from files for `ψ_r` and `ψ_c`.
 
 Allocates output `psi`.
 """
-function load_psi(gp::ParamsGP, args...)
-    psi = Array{ComplexF64}(undef, gp.dims...)
-    load_psi!(psi, gp, args...) :: ComplexArray
+function load_psi(gp::ParamsGP, args...; slice=nothing)
+    psi = Array{ComplexF64}(undef, _loaded_dims(size(gp), slice))
+    load_psi!(psi, gp, args...; slice=slice) :: ComplexArray
 end
+
+_loaded_dims(dims, slice::Nothing) = dims
+_loaded_dims(dims::Dims{N}, slice::Slice{N}) where {N} =
+    size(CartesianIndices(dims)[slice...])
 
 """
     create_fft_plans_1d!(ψ::ComplexArray{T,N}) -> (plans_1, plans_2, ...)
