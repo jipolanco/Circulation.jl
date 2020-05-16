@@ -174,21 +174,26 @@ Compute circulation on a 2D slice around loops with a fixed rectangle shape.
   consistent with this parameter.
 
 """
-function circulation!(Γ::AbstractMatrix{<:Real},
-                      I::IntegralField2D,
-                      rs::NTuple{2,Int};
-                      grid_step::Int = 1,
-                     )
+function circulation!(
+        Γ::AbstractMatrix{<:Real}, I::IntegralField2D, rs::NTuple{2,Int};
+        grid_step::Int = 1,
+    )
     if grid_step .* size(Γ) != size(I)
         throw(DimensionMismatch("incompatible size of output array"))
     end
 
-    loop_base = Rectangle((0, 0), rs)
-    rs_half = rs .>> 1  # half radius (truncated if rs has odd numbers...)
+    # Half radius (truncated if rs has odd numbers...).
+    # This is used just to make sure that the element Γ[i, j] corresponds to
+    # the loop centred at (x[i], y[j]).
+    rs_half = rs .>> 1
 
     for j ∈ axes(Γ, 2), i ∈ axes(Γ, 1)
-        x0 = grid_step .* (i, j) .- rs_half  # lower left corner of loop
-        loop = loop_base + x0
+        # Lower left corner of loop.
+        # This formula is to make sure that on refined grids (when grid_step >
+        # 1), the circulation is computed around exactly the same loops as the
+        # original grid.
+        x0 = 1 .+ grid_step .* (i - 1, j - 1) .- rs_half
+        loop = Rectangle(x0, rs)
         @inbounds Γ[i, j] = circulation(loop, I)
     end
 
