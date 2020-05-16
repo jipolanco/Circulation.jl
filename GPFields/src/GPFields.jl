@@ -104,10 +104,14 @@ Load full complex ψ(x) field from files for `ψ_r` and `ψ_c`.
 
 Allocates output `psi`.
 """
-function load_psi(gp::ParamsGP, args...)
-    psi = Array{ComplexF64}(undef, gp.dims...)
-    load_psi!(psi, gp, args...) :: ComplexArray
+function load_psi(gp::ParamsGP, args...; slice=nothing)
+    psi = Array{ComplexF64}(undef, _loaded_dims(size(gp), slice))
+    load_psi!(psi, gp, args...; slice=slice) :: ComplexArray
 end
+
+_loaded_dims(dims, slice::Nothing) = dims
+_loaded_dims(dims::Dims{N}, slice::Slice{N}) where {N} =
+    size(CartesianIndices(dims)[slice...])
 
 """
     create_fft_plans_1d!(ψ::ComplexArray{T,N}) -> (plans_1, plans_2, ...)
@@ -222,8 +226,7 @@ end
 
 """
     resample_field_fourier!(
-        dest::AbstractArray, src::AbstractArray,
-        params_src::ParamsGP; destroy_input = true,
+        dest::AbstractArray, src::AbstractArray, params_src::ParamsGP,
     )
 
 Resample complex field by zero-padding in Fourier space.
@@ -253,6 +256,10 @@ function resample_field_fourier!(dst::ComplexArray{T,N}, src::ComplexArray{T,N},
 
     kmap = _wavenumber_map.(ksrc, kdst)
 
+    # The coefficients are scaled by this ratio, to make sure that the
+    # normalised inverse FFT (e.g. with ifft) has the good magnitude.
+    scale = length(dst) / length(src)
+
     # 1. Set everything to zero.
     fill!(dst, 0)
 
@@ -260,7 +267,7 @@ function resample_field_fourier!(dst::ComplexArray{T,N}, src::ComplexArray{T,N},
     for I in CartesianIndices(src)
         is = Tuple(I)
         js = getindex.(kmap, is)
-        dst[js...] = src[I]
+        dst[js...] = scale * src[I]
     end
 
     dst

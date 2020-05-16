@@ -12,6 +12,7 @@ struct ParamsGP{D}  # D: dimension
     κ    :: Float64            # quantum of circulation
 end
 
+Base.size(p::ParamsGP) = p.dims
 Base.ndims(::ParamsGP{D}) where {D} = D
 
 """
