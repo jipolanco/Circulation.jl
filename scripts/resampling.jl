@@ -19,7 +19,7 @@ get_params() = (
     slice = (:, :, 1),
     c = 1.0,
     nxi = 1.5,
-    resampling_factor = 2,
+    resampling_factor = 4,
     loop_size = 8,
 )
 
@@ -88,30 +88,36 @@ function main(params)
 
     # plot_integral_fields(gp_in, I_in.w, I.w, slice_res, ρ_in)
 
-    test_circulation(gp_in, ρ_in, I_in, I, slice_res,
+    test_circulation(gp_in, gp_res, ρ_in, ρ, I_in, I, slice_res,
                      loop_size=params.loop_size)
 
     nothing
 end
 
-function test_circulation(gp_in, ρ_in, I_in, I, slice_res; loop_size)
+function test_circulation(gp_in, gp_res, ρ_in, ρ, I_in, I, slice_res; loop_size)
     κ = gp_in.κ
 
     Γ_in = Array{Float64}(undef, size(I_in))
-    Γ = similar(Γ_in)
+    Γ = similar(Γ_in)                # computed on original grid from resampled field
+    Γ_full = similar(Γ_in, size(I))  # computed on the whole refined grid
 
     let r = loop_size
         resampling_factor = first(Int.(size(I) ./ size(I_in)))
         rs = (r, r)
-        circulation!(Γ_in, I_in, rs)
-        circulation!(Γ, I, resampling_factor .* rs, grid_step=resampling_factor)
+        rs_res = resampling_factor .* rs
+        circulation!(Γ_in, I_in, rs, grid_step=1)
+        circulation!(Γ, I, rs_res, grid_step=resampling_factor)
+        circulation!(Γ_full, I, rs_res, grid_step=1)
         Γ_in ./= κ
         Γ ./= κ
+        Γ_full ./= κ
         @show extrema(Γ_in)
         @show extrema(Γ)
+        @show extrema(Γ_full)
     end
 
     xy = GPFields.get_coordinates(gp_in)
+    xy_fine = GPFields.get_coordinates(gp_res)
 
     let (fig, axes) = plt.subplots(1, 2, figsize=(8, 3.5),
                                    sharex=true, sharey=true)
@@ -130,9 +136,11 @@ function test_circulation(gp_in, ρ_in, I_in, I, slice_res; loop_size)
         end
         let ax = axes[2]
             ax.set_aspect(:equal)
-            cf = ax.contourf(xy..., Γ'; kwargs...)
+            # cf = ax.contourf(xy..., Γ'; kwargs...)
+            cf = ax.contourf(xy_fine..., Γ_full'; kwargs...)
             fig.colorbar(cf, ax=ax)
-            plot_vortices!(ax, xy, ρ_in)
+            # plot_vortices!(ax, xy, ρ_in)
+            plot_vortices!(ax, xy_fine, ρ)
         end
     end
 
