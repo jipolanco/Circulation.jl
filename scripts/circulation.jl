@@ -75,12 +75,15 @@ function parse_params_circulation(d::Dict, dims)
     moments = stats["moments"]
     hist = stats["histogram"]
 
+    resampled = get(stats, "compute_in_resampled_grid", false)
+
     Nfrac = get(moments, "N_fractional", 0)
 
     (
         eps_velocity = d["epsilon_velocity"] :: Real,
         max_slices = max_slices,
         loop_sizes = loop_sizes,
+        compute_in_resampled_grid = resampled :: Bool,
         moments_pmax = moments["p_max"] :: Int,
         moments_Nfrac = Nfrac == 0 ? nothing : Nfrac,
         hist_Nedges = hist["num_bin_edges"] :: Int,
@@ -135,8 +138,12 @@ function main(P::NamedTuple)
 
     loop_sizes = P.circulation.loop_sizes
     resampling = P.fields.resampling_factor
+    resampled_grid = P.circulation.compute_in_resampled_grid
     @info "Loop sizes: $loop_sizes ($(length(loop_sizes)) sizes)"
     @info "Resampling factor: $resampling"
+    if resampling > 1
+        @info "Computing in $(resampled_grid ? "resampled" : "original") grid"
+    end
 
     to = TimerOutput()
     stats = let par = P.circulation
@@ -156,6 +163,7 @@ function main(P::NamedTuple)
             moments_Nfrac=par.moments_Nfrac,
             hist_edges=edges,
             resampling_factor=resampling,
+            compute_in_resampled_grid=resampled_grid,
         )
     end
 

@@ -17,6 +17,7 @@ struct CirculationStats{Loops, M<:Moments, H<:Histogram}
     Nr         :: Int    # number of loop sizes
     loop_sizes :: Loops  # length Nr
     resampling_factor :: Int
+    resampled_grid :: Bool
     moments    :: M
     histogram  :: H
 end
@@ -26,6 +27,7 @@ end
                      num_moments=20,
                      moments_Nfrac=nothing,
                      resampling_factor=1,
+                     compute_in_resampled_grid=false,
                      hist_edges=LinRange(-10, 10, 42))
 
 Construct and initialise statistics.
@@ -36,24 +38,31 @@ Construct and initialise statistics.
   into a finer grid using padding in Fourier space.
   The number of grid points is increased by a factor `resampling_factor` in
   every direction.
+
+- `compute_in_resampled_grid`: if this is `true` and `resampling_factor > 1`,
+  the statistics are accumulated over all the possible loops in the resampled
+  (finer) grid, instead of the original (coarser) grid.
+  This takes more time but may lead to better statistics.
 """
 function CirculationStats(
         loop_sizes;
         num_moments=20,
         moments_Nfrac=nothing,
         resampling_factor=1,
+        compute_in_resampled_grid=false,
         hist_edges=LinRange(-10, 10, 42),
     )
     resampling_factor >= 1 || error("resampling_factor must be positive")
     Nr = length(loop_sizes)
     M = Moments(num_moments, Nr, Float64; Nfrac=moments_Nfrac)
     H = Histogram(hist_edges, Nr, Int)
-    CirculationStats(Nr, loop_sizes, resampling_factor, M, H)
+    CirculationStats(Nr, loop_sizes, resampling_factor,
+                     compute_in_resampled_grid, M, H)
 end
 
 Base.zero(s::CirculationStats) =
-    CirculationStats(s.Nr, s.loop_sizes, s.resampling_factor, zero(s.moments),
-                     zero(s.histogram))
+    CirculationStats(s.Nr, s.loop_sizes, s.resampling_factor, s.resampled_grid,
+                     zero(s.moments), zero(s.histogram))
 
 # Dictionary of statistics.
 # Useful for defining circulation statistics related to quantities such as
@@ -147,6 +156,7 @@ end
 function Base.write(g::Union{HDF5File,HDF5Group}, stats::CirculationStats)
     g["loop_sizes"] = collect(stats.loop_sizes)
     g["resampling_factor"] = stats.resampling_factor
+    g["resampled_grid"] = stats.resampled_grid
     write(g_create(g, "Moments"), stats.moments)
     write(g_create(g, "Histogram"), stats.histogram)
     g
@@ -240,12 +250,15 @@ function analyse!(stats::StatsDict, orientation::Val, gp::ParamsGP{D},
     @assert Nslices >= 1
     @assert !isempty(stats)
 
-    resampling_factor = let vals = values(stats)
+    resampling_factor, resampled_grid = let vals = values(stats)
         r = first(vals).resampling_factor
+        grid = first(vals).resampled_grid
         @assert(all(getfield.(vals, :resampling_factor) .=== r),
                 "all stats must have the same resampling factor")
         @assert r >= 1 "only upscaling is allowed"
-        r
+        @assert(all(getfield.(vals, :resampled_grid) .=== grid),
+                "all stats must have the same `compute_in_resampled_grid` value")
+        r, grid
     end
 
     slices = 1:Nslices
@@ -269,7 +282,7 @@ function analyse!(stats::StatsDict, orientation::Val, gp::ParamsGP{D},
 
     # Allocate arrays (one per thread).
     fields = [allocate_stats_fields(Nij_input, Nij_compute, Lij,
-                                    with_v || with_vreg)
+                                    with_v || with_vreg, resampled_grid)
               for t = 1:Nth]
     stats_t = [zero(stats) for t = 1:Nth]
 
@@ -303,7 +316,8 @@ function analyse!(stats::StatsDict, orientation::Val, gp::ParamsGP{D},
     stats
 end
 
-function allocate_stats_fields(Nij_input, Nij_resampled, Lij, with_v)
+function allocate_stats_fields(Nij_input, Nij_resampled, Lij, with_v,
+                               compute_in_resampled_grid::Bool)
     FFTW.set_num_threads(1)  # make sure that plans are not threaded!
     ψ_in = Array{ComplexF64}(undef, Nij_input...)
     ψ = if Nij_input === Nij_resampled
@@ -312,13 +326,14 @@ function allocate_stats_fields(Nij_input, Nij_resampled, Lij, with_v)
         similar(ψ_in, Nij_resampled)
     end
     ρ = similar(ψ, Float64)
+    Γ_size = compute_in_resampled_grid ? Nij_resampled : Nij_input
     ps = (similar(ρ), similar(ρ))  # momentum
     (
         ψ_in = ψ_in,
         ψ = ψ,
         ψ_buf = similar(ψ),
         ρ = ρ,
-        Γ = similar(ρ, Nij_input),
+        Γ = similar(ρ, Γ_size),
         ps = ps,
         vs = with_v ? similar.(ps) : nothing,
         I = IntegralField2D(ps[1], L=Lij),
@@ -379,11 +394,13 @@ function compute!(stats::CirculationStats, Γ, Ip, vs, to)
     @timeit to "prepare!" prepare!(Ip, vs)
 
     resampling = stats.resampling_factor
+    grid_step = stats.resampled_grid ? 1 : resampling
+    @assert grid_step .* size(Γ) == size(vs[1]) "incorrect dimensions of Γ"
 
     for (r_ind, r) in enumerate(stats.loop_sizes)
         s = resampling * r  # loop size in resampled field
         @timeit to "circulation!" circulation!(
-            Γ, Ip, (s, s), grid_step=resampling)
+            Γ, Ip, (s, s), grid_step=grid_step)
         @timeit to "statistics" update!(stats, Γ, r_ind; to=to)
     end
 

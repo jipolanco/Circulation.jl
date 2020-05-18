@@ -53,6 +53,13 @@ epsilon_velocity = 0
     # Repeated values will be removed.
     log_base = 1.4
 
+    [circulation.statistics]
+    # If fields.resampling_factor > 1, accumulate statistics in the resampled
+    # (finer) grid instead of the original grid.
+    # This leads to more statistics (which may or may not be redundant...), and
+    # takes more time. Default is false.
+    compute_in_resampled_grid = true
+
     [circulation.statistics.moments]
     p_max = 10  # maximum exponent (should be even)
 
