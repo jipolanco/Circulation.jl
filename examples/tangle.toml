@@ -63,10 +63,9 @@ epsilon_velocity = 0
     [circulation.statistics.moments]
     p_max = 10  # maximum exponent (should be even)
 
-    # Number of fractional exponents to compute in 0 <= p < 1.
-    # Note that negative exponents will also be computed.
-    # For example, if this is 10, the exponents in -0.9:0.1:0.9 will be
-    # considered. Default is 0 (no fractional exponents).
+    # Number of fractional exponents to compute in 0 < p ≤ 1.
+    # If this is 10, the exponents in 0.1:0.1:1 will be considered.
+    # Default is 0 (no fractional exponents).
     # N_fractional = 10
 
     [circulation.statistics.histogram]
