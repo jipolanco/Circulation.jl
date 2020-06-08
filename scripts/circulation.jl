@@ -153,6 +153,7 @@ function main(P::NamedTuple)
         edges = LinRange(-M * κ, M * κ, Nedges)
 
         Circulation.init_statistics(
+            CirculationStats,
             loop_sizes,
             which=(
                 VelocityLikeFields.Velocity,

@@ -1,6 +1,3 @@
-include("moments.jl")
-include("histogram.jl")
-
 module VelocityLikeFields
 # Different velocity-like vector fields from which a circulation can be computed.
 @enum VelocityLikeField Velocity RegVelocity Momentum
@@ -8,77 +5,27 @@ end
 
 using .VelocityLikeFields
 
-"""
-    CirculationStats{T}
+abstract type AbstractFlowStats end
 
-Circulation statistics, including moments and histograms.
-"""
-struct CirculationStats{Loops, M<:Moments, H<:Histogram}
-    Nr         :: Int    # number of loop sizes
-    loop_sizes :: Loops  # length Nr
-    resampling_factor :: Int
-    resampled_grid :: Bool
-    moments    :: M
-    histogram  :: H
-end
-
-"""
-    CirculationStats(loop_sizes;
-                     num_moments=20,
-                     moments_Nfrac=nothing,
-                     resampling_factor=1,
-                     compute_in_resampled_grid=false,
-                     hist_edges=LinRange(-10, 10, 42))
-
-Construct and initialise statistics.
-
-# Parameters
-
-- `resampling_factor`: if greater than one, the loaded ψ fields are resampled
-  into a finer grid using padding in Fourier space.
-  The number of grid points is increased by a factor `resampling_factor` in
-  every direction.
-
-- `compute_in_resampled_grid`: if this is `true` and `resampling_factor > 1`,
-  the statistics are accumulated over all the possible loops in the resampled
-  (finer) grid, instead of the original (coarser) grid.
-  This takes more time but may lead to better statistics.
-"""
-function CirculationStats(
-        loop_sizes;
-        num_moments=20,
-        moments_Nfrac=nothing,
-        resampling_factor=1,
-        compute_in_resampled_grid=false,
-        hist_edges=LinRange(-10, 10, 42),
-    )
-    resampling_factor >= 1 || error("resampling_factor must be positive")
-    Nr = length(loop_sizes)
-    M = Moments(num_moments, Nr, Float64; Nfrac=moments_Nfrac)
-    H = Histogram(hist_edges, Nr, Int)
-    CirculationStats(Nr, loop_sizes, resampling_factor,
-                     compute_in_resampled_grid, M, H)
-end
-
-Base.zero(s::CirculationStats) =
-    CirculationStats(s.Nr, s.loop_sizes, s.resampling_factor, s.resampled_grid,
-                     zero(s.moments), zero(s.histogram))
+include("moments.jl")
+include("histogram.jl")
+include("circulation.jl")
 
 # Dictionary of statistics.
-# Useful for defining circulation statistics related to quantities such as
-# velocity, regularised velocity and momentum.
-const StatsDict = Dict{VelocityLikeFields.VelocityLikeField,
-                       <:CirculationStats}
+# Useful for defining flow statistics related to quantities such as velocity,
+# regularised velocity and momentum.
+const StatsDict{S} =
+    Dict{VelocityLikeFields.VelocityLikeField, S} where {S <: AbstractFlowStats}
 
 Base.zero(s::SD) where {SD <: StatsDict} = SD(k => zero(v) for (k, v) in s)
 
 """
-    update!(stats::CirculationStats, Γ, r_ind; to=TimerOutput())
+    update!(stats::AbstractFlowStats, Γ, r_ind; to=TimerOutput())
 
 Update circulation data associated to a given loop size (with index `r_ind`)
 using circulation data.
 """
-function update!(stats::CirculationStats, Γ, r_ind; to=TimerOutput())
+function update!(stats::AbstractFlowStats, Γ, r_ind; to=TimerOutput())
     @assert r_ind ∈ 1:stats.Nr
     @timeit to "moments"   update!(stats.moments, Γ, r_ind)
     @timeit to "histogram" update!(stats.histogram, Γ, r_ind)
@@ -86,38 +33,37 @@ function update!(stats::CirculationStats, Γ, r_ind; to=TimerOutput())
 end
 
 """
-    reduce!(stats::CirculationStats, v::AbstractVector{<:CirculationStats})
+    reduce!(stats::AbstractFlowStats, v::AbstractVector{<:AbstractFlowStats})
 
 Reduce values from list of statistics.
 """
-function reduce!(stats::CirculationStats, v::AbstractVector{<:CirculationStats})
+function reduce!(stats::S, v::AbstractVector{<:S}) where {S <: AbstractFlowStats}
     @assert all(stats.Nr .== getfield.(v, :Nr))
-    @assert all(Ref(stats.loop_sizes) .== getfield.(v, :loop_sizes))
     reduce!(stats.moments, getfield.(v, :moments))
     reduce!(stats.histogram, getfield.(v, :histogram))
     stats
 end
 
 """
-    finalise!(stats::CirculationStats)
+    finalise!(stats::AbstractFlowStats)
 
 Compute final statistics from collected data.
 
 For instance, moment data is divided by the number of samples to obtain the
 actual moments.
 """
-function finalise!(stats::CirculationStats)
+function finalise!(stats::AbstractFlowStats)
     finalise!(stats.moments)
     finalise!(stats.histogram)
     stats
 end
 
 """
-    reset!(stats::CirculationStats)
+    reset!(stats::AbstractFlowStats)
 
 Reset all statistics to zero.
 """
-function reset!(stats::CirculationStats)
+function reset!(stats::AbstractFlowStats)
     reset!(stats.moments)
     reset!(stats.histogram)
     stats
@@ -129,7 +75,7 @@ reset!(s::StatsDict) = reset!.(values(s))
 function reduce!(dest::StatsDict, src::AbstractVector{<:StatsDict})
     @assert all(Ref(keys(dest)) .== keys.(src))
     for k in keys(dest)
-        src_stats = getindex.(src, k) :: Vector{<:CirculationStats}
+        src_stats = getindex.(src, k) :: Vector{<:AbstractFlowStats}
         reduce!(dest[k], src_stats)
     end
     dest
@@ -153,15 +99,6 @@ function Base.write(ff::Union{HDF5File,HDF5Group}, stats::StatsDict)
     ff
 end
 
-function Base.write(g::Union{HDF5File,HDF5Group}, stats::CirculationStats)
-    g["loop_sizes"] = collect(stats.loop_sizes)
-    g["resampling_factor"] = stats.resampling_factor
-    g["resampled_grid"] = stats.resampled_grid
-    write(g_create(g, "Moments"), stats.moments)
-    write(g_create(g, "Histogram"), stats.histogram)
-    g
-end
-
 struct ParamsDataFile
     directory :: String
     index     :: Int
@@ -173,9 +110,12 @@ struct ParamsDataFile
 end
 
 """
-    init_statistics(loop_sizes; which, stats_args...)
+    init_statistics(S, loop_sizes; which, stats_args...)
 
 Initialise statistics that can be passed to `analyse!`.
+
+`S` must be the type of statistics (for now, only `CirculationStats` is
+supported).
 
 ## Optional parameters
 
@@ -185,16 +125,17 @@ Initialise statistics that can be passed to `analyse!`.
 - `stats_args`: arguments passed to `CirculationStats`.
 """
 function init_statistics(
-        loop_sizes;
+        ::Type{S},
+        args...;
         which=(VelocityLikeFields.Velocity,
                VelocityLikeFields.RegVelocity,
                VelocityLikeFields.Momentum),
         stats_args...
-    )
+    ) where {S <: AbstractFlowStats}
     if length(unique(which)) != length(which)
         throw(ArgumentError("quantities may not be repeated: $which"))
     end
-    Dict(w => CirculationStats(loop_sizes; stats_args...) for w in which)
+    Dict(w => S(args...; stats_args...) for w in which)
 end
 
 """
@@ -205,8 +146,8 @@ end
 
 Compute circulation statistics from all possible slices of a GP field.
 
-The `stats` dictionary must contain one `CirculationStats` per quantity of
-interest.
+The `stats` dictionary must contain one object of type `AbstractFlowStats` per
+quantity of interest.
 The keys of the dictionary are values of type `VelocityLikeFields.VelocityLikeField`.
 This dictionary may be generated by calling `init_statistics`.
 
@@ -387,24 +328,6 @@ function analyse_slice!(
     end
 
     nothing
-end
-
-function compute!(stats::CirculationStats, Γ, Ip, vs, to)
-    # Set integral values with momentum data.
-    @timeit to "prepare!" prepare!(Ip, vs)
-
-    resampling = stats.resampling_factor
-    grid_step = stats.resampled_grid ? 1 : resampling
-    @assert grid_step .* size(Γ) == size(vs[1]) "incorrect dimensions of Γ"
-
-    for (r_ind, r) in enumerate(stats.loop_sizes)
-        s = resampling * r  # loop size in resampled field
-        @timeit to "circulation!" circulation!(
-            Γ, Ip, (s, s), grid_step=grid_step)
-        @timeit to "statistics" update!(stats, Γ, r_ind; to=to)
-    end
-
-    stats
 end
 
 function included_dimensions(::Val{N}, ::Val{s}) where {N,s}

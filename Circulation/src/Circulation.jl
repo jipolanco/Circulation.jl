@@ -220,14 +220,11 @@ function circulation!(
     if grid_step .* size(Γ) != size(I)
         throw(DimensionMismatch("incompatible size of output array"))
     end
-
     loops = LoopIterator(I, rs, grid_step)
-
     for j ∈ axes(Γ, 2), i ∈ axes(Γ, 1)
         @inbounds loop = loops[i, j]
         @inbounds Γ[i, j] = circulation(loop, I)
     end
-
     Γ
 end
 
