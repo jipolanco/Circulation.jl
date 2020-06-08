@@ -66,6 +66,10 @@ parse_params_output(d::Dict) = (
 )
 
 function parse_params_circulation(d::Dict, dims)
+    if !get(d, "enabled", true)
+        return nothing  # circulation stats are disabled
+    end
+
     max_slices = let m = get(d, "max_slices", 0) :: Int
         m == 0 ? typemax(Int) : m  # replace 0 -> typemax(Int)
     end
@@ -88,6 +92,37 @@ function parse_params_circulation(d::Dict, dims)
         moments_Nfrac = Nfrac == 0 ? nothing : Nfrac,
         hist_Nedges = hist["num_bin_edges"] :: Int,
         hist_max_kappa = Float64(hist["max_kappa"]),
+    )
+end
+
+function parse_params_increments(d::Dict, dims)
+    if !get(d, "enabled", true)
+        return nothing  # increment stats are disabled
+    end
+
+    max_slices = let m = get(d, "max_slices", 0) :: Int
+        m == 0 ? typemax(Int) : m  # replace 0 -> typemax(Int)
+    end
+    increments =
+        parse_loop_sizes(d["spatial_offsets"], dims) :: AbstractVector{Int}
+
+    stats = d["statistics"]
+    moments = stats["moments"]
+    hist = stats["histogram"]
+
+    resampled = get(stats, "compute_in_resampled_grid", false)
+
+    Nfrac = get(moments, "N_fractional", 0)
+
+    (
+        eps_velocity = d["epsilon_velocity"] :: Real,
+        max_slices = max_slices,
+        increments = increments,
+        compute_in_resampled_grid = resampled :: Bool,
+        moments_pmax = moments["p_max"] :: Int,
+        moments_Nfrac = Nfrac == 0 ? nothing : Nfrac,
+        hist_Nedges = hist["num_bin_edges"] :: Int,
+        hist_max_c = Float64(hist["max_c"]),
     )
 end
 
@@ -136,9 +171,27 @@ function main(P::NamedTuple)
         nxi = P.physics.nxi,
     )
 
-    loop_sizes = P.circulation.loop_sizes
+    num_stats = count(!isnothing, (P.circulation, P.increments))
+    if num_stats > 1
+        error("cannot enable both circulation and increment statistics!")
+    end
+
+    stats_params, stats_type = if P.circulation !== nothing
+        @info "Computing circulation statistics"
+        loop_sizes = P.circulation.loop_sizes
+        output_name = "Circulation"
+        P.circulation, CirculationStats
+    elseif P.increments !== nothing
+        @info "Computing velocity increment statistics"
+        loop_sizes = P.increments.increments
+        output_name = "Increments"
+        P.increments, IncrementStats
+    else
+        error("all statistics are disabled!")
+    end
+
     resampling = P.fields.resampling_factor
-    resampled_grid = P.circulation.compute_in_resampled_grid
+    resampled_grid = stats_params.compute_in_resampled_grid
     @info "Loop sizes: $loop_sizes ($(length(loop_sizes)) sizes)"
     @info "Resampling factor: $resampling"
     if resampling > 1
@@ -146,14 +199,20 @@ function main(P::NamedTuple)
     end
 
     to = TimerOutput()
-    stats = let par = P.circulation
-        M = par.hist_max_kappa
+    stats = let par = stats_params
         Nedges = par.hist_Nedges
-        κ = params.κ
-        edges = LinRange(-M * κ, M * κ, Nedges)
+        if stats_type === CirculationStats
+            κ = params.κ
+            M = par.hist_max_kappa
+            edges = LinRange(-M * κ, M * κ, Nedges)
+        elseif stats_type === IncrementStats
+            c = params.c
+            M = par.hist_max_c
+            edges = LinRange(-M * c, M * c, Nedges)
+        end
 
         Circulation.init_statistics(
-            CirculationStats,
+            stats_type,
             loop_sizes,
             which=(
                 VelocityLikeFields.Velocity,
@@ -172,7 +231,7 @@ function main(P::NamedTuple)
     analyse!(
         stats, params, P.fields.data_dir,
         data_idx=P.fields.data_idx,
-        eps_vel=P.circulation.eps_velocity,
+        eps_vel=stats_params.eps_velocity,
         to=to,
         max_slices=1,
     )
@@ -183,9 +242,9 @@ function main(P::NamedTuple)
     analyse!(
         stats, params, P.fields.data_dir,
         data_idx=P.fields.data_idx,
-        eps_vel=P.circulation.eps_velocity,
+        eps_vel=stats_params.eps_velocity,
         to=to,
-        max_slices=P.circulation.max_slices,
+        max_slices=stats_params.max_slices,
     )
 
     println(to)
@@ -193,7 +252,7 @@ function main(P::NamedTuple)
     @info "Saving $(P.output.statistics)"
     h5open(P.output.statistics, "w") do ff
         write(g_create(ff, "ParamsGP"), params)
-        write(g_create(ff, "Circulation"), stats)
+        write(g_create(ff, output_name), stats)
     end
 
     nothing
@@ -210,10 +269,12 @@ function main()
 
     fields = parse_params_fields(p["fields"])
     circ = parse_params_circulation(p["circulation"], fields.dims)
+    incr = parse_params_increments(p["increments"], fields.dims)
 
     params = (
         fields = fields,
         circulation = circ,
+        increments = incr,
         physics = parse_params_physics(p["physics"]),
         output = parse_params_output(p["output"]),
     )

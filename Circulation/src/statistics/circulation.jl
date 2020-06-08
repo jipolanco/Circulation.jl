@@ -14,17 +14,21 @@ struct CirculationStats{Loops, M<:Moments, H<:Histogram} <: AbstractFlowStats
     histogram  :: H
 end
 
+increments(s::CirculationStats) = s.loop_sizes
+
 """
     CirculationStats(loop_sizes;
-                     num_moments=20,
+                     hist_edges,
+                     num_moments,
                      moments_Nfrac=nothing,
                      resampling_factor=1,
-                     compute_in_resampled_grid=false,
-                     hist_edges=LinRange(-10, 10, 42))
+                     compute_in_resampled_grid=false)
 
 Construct and initialise statistics.
 
 # Parameters
+
+- `loop_sizes`: sizes of square circulation loops in grid step units.
 
 - `resampling_factor`: if greater than one, the loaded ψ fields are resampled
   into a finer grid using padding in Fourier space.
@@ -38,11 +42,10 @@ Construct and initialise statistics.
 """
 function CirculationStats(
         loop_sizes;
-        num_moments=20,
+        hist_edges, num_moments,
         moments_Nfrac=nothing,
         resampling_factor=1,
         compute_in_resampled_grid=false,
-        hist_edges=LinRange(-10, 10, 42),
     )
     resampling_factor >= 1 || error("resampling_factor must be positive")
     Nr = length(loop_sizes)
@@ -52,11 +55,18 @@ function CirculationStats(
                      compute_in_resampled_grid, M, H)
 end
 
-Base.zero(s::CirculationStats) =
-    CirculationStats(s.Nr, s.loop_sizes, s.resampling_factor, s.resampled_grid,
-                     zero(s.moments), zero(s.histogram))
+function allocate_fields(::CirculationStats, args...; L)
+    data = allocate_stats_fields(args...)
+    (;
+        data...,
+        I = IntegralField2D(data.ps[1], L=L),
+    )
+end
 
-function compute!(stats::CirculationStats, Γ, Ip, vs, to)
+function compute!(stats::CirculationStats, fields, vs, to)
+    Γ = fields.Γ
+    Ip = fields.I
+
     # Set integral values with momentum data.
     @timeit to "prepare!" prepare!(Ip, vs)
 
@@ -64,7 +74,7 @@ function compute!(stats::CirculationStats, Γ, Ip, vs, to)
     grid_step = stats.resampled_grid ? 1 : resampling
     @assert grid_step .* size(Γ) == size(vs[1]) "incorrect dimensions of Γ"
 
-    for (r_ind, r) in enumerate(stats.loop_sizes)
+    for (r_ind, r) in enumerate(increments(stats))
         s = resampling * r  # loop size in resampled field
         @timeit to "circulation!" circulation!(
             Γ, Ip, (s, s), grid_step=grid_step)
@@ -75,7 +85,7 @@ function compute!(stats::CirculationStats, Γ, Ip, vs, to)
 end
 
 function Base.write(g::Union{HDF5File,HDF5Group}, stats::CirculationStats)
-    g["loop_sizes"] = collect(stats.loop_sizes)
+    g["loop_sizes"] = collect(increments(stats))
     g["resampling_factor"] = stats.resampling_factor
     g["resampled_grid"] = stats.resampled_grid
     write(g_create(g, "Moments"), stats.moments)

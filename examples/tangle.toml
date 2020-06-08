@@ -16,7 +16,7 @@ L_2pi = [1, 1, 1]    # domain size in multiples of 2π (default is [1, 1, 1])
 # The resampling is done by zero-padding ψ in Fourier space.
 # Note that the loop sizes defined in circulation.loops refer to the original
 # grid resolution, and not the resampled one.
-resampling_factor = 2
+resampling_factor = 2  # not sure if useful for increments...
 
 [physics]
 c = 1.0
@@ -27,6 +27,9 @@ nxi = 1.5
 statistics = "tangle_256.h5"
 
 [circulation]
+# Compute circulation statistics?
+enabled = false
+
 # Maximum number of slices per orientation to analyse.
 # If 0 (default), all available slices are analysed.
 max_slices = 8
@@ -58,7 +61,7 @@ epsilon_velocity = 0
     # (finer) grid instead of the original grid.
     # This leads to more statistics (which may or may not be redundant...), and
     # takes more time. Default is false.
-    compute_in_resampled_grid = true
+    compute_in_resampled_grid = false
 
     [circulation.statistics.moments]
     p_max = 10  # maximum exponent (should be even)
@@ -72,3 +75,27 @@ epsilon_velocity = 0
     num_bin_edges = 4000  # number of bin edges; should be even so that the
                           # zero value falls inside a bin
     max_kappa = 30.5  # max value in histogram (in units of kappa)
+
+
+# Velocity increment statistics.
+# Parameters are mostly the same as for the circulation.
+[increments]
+enabled = true
+max_slices = 8
+epsilon_velocity = 0
+
+    [increments.spatial_offsets]
+    selection_type = "log"
+    # sizes = [1, 2, 4, 8, 16, 32, 64]
+    log_base = 1.4
+
+    [increments.statistics]
+    compute_in_resampled_grid = false
+
+    [increments.statistics.moments]
+    p_max = 10
+    N_fractional = 0
+
+    [increments.statistics.histogram]
+    num_bin_edges = 4000
+    max_c = 10.0  # max velocity in histogram (in units of speed of sound)

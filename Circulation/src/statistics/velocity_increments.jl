@@ -1,0 +1,117 @@
+# Spatial velocity increment statistics.
+
+"""
+    IncrementStats{T} <: AbstractFlowStats
+
+Spatial increment statistics, including moments and histograms.
+"""
+struct IncrementStats{Increments, M<:Moments, H<:Histogram} <: AbstractFlowStats
+    Nr         :: Int         # number of increments to consider
+    increments :: Increments  # length = Nr
+    resampling_factor :: Int  # TODO resampling may not make much sense here...
+    resampled_grid    :: Bool
+    moments    :: M
+    histogram  :: H
+end
+
+increments(s::IncrementStats) = s.increments
+
+"""
+    IncrementStats(increments;
+                   hist_edges,
+                   num_moments,
+                   moments_Nfrac=nothing,
+                   resampling_factor=1,
+                   compute_in_resampled_grid=false)
+
+Construct and initialise statistics.
+
+# Parameters
+
+- `increments`: spatial increments in grid steps units.
+
+See [`CirculationStats`](@ref) for other parameters.
+"""
+function IncrementStats(
+        increments;
+        hist_edges, num_moments,
+        moments_Nfrac=nothing,
+        resampling_factor=1,
+        compute_in_resampled_grid=false,
+    )
+    resampling_factor >= 1 || error("resampling_factor must be positive")
+    Nr = length(increments)
+    M = Moments(num_moments, Nr, Float64; Nfrac=moments_Nfrac)
+    H = Histogram(hist_edges, Nr, Int)
+    IncrementStats(Nr, increments, resampling_factor, compute_in_resampled_grid,
+                   M, H)
+end
+
+function allocate_fields(S::IncrementStats, args...; L)
+    allocate_stats_fields(args...)
+end
+
+function compute!(stats::IncrementStats, fields, vs, to)
+    Γ = fields.Γ
+    resampling = stats.resampling_factor
+    grid_step = stats.resampled_grid ? 1 : resampling
+    @assert grid_step .* size(Γ) == size(vs[1]) "incorrect dimensions of Γ"
+
+    # For now, we compute longitudinal increments along the two directions.
+    # Note that this is redundant, as each longitudinal increment is computed
+    # twice when all slice directions are considered!
+    # TODO
+    # - compute along one of the slice dimensions (this requires information on
+    #   which slice we're on, to avoid repeating data)
+    # - transverse increments?
+
+    for (r_ind, r) in enumerate(increments(stats))
+        s = resampling * r  # increment in resampled field
+        for i = 1:2
+            # Compute longitudinal velocity increments of velocity v[i].
+            @timeit to "increments" velocity_increments!(
+                Γ, vs[i], s, i, grid_step=grid_step)
+            @timeit to "statistics" update!(stats, Γ, r_ind; to=to)
+        end
+    end
+
+    stats
+end
+
+"""
+    velocity_increments!(dv, v, r, dim)
+
+Compute increments from velocity component `v` along dimension `dim`.
+"""
+function velocity_increments!(Γ::AbstractMatrix, v::AbstractMatrix,
+                              r::Integer, dim::Integer; grid_step = 1)
+    @assert dim ∈ (1, 2)
+    if grid_step .* size(Γ) != size(v)
+        throw(DimensionMismatch("incompatible size of output array"))
+    end
+    inds_v = map(axes(v)) do ax
+        range(first(ax), last(ax), step=grid_step)
+    end
+    # Note: increment `r` is in the resampled (input) field.
+    δi, δj = dim == 1 ? (r, 0) : (0, r)  # increment in 2D input grid
+    Ni, Nj = size(v)
+    for j_out ∈ axes(Γ, 2), i_out ∈ axes(Γ, 1)
+        i = inds_v[1][i_out]
+        j = inds_v[2][j_out]
+        v1 = v[i, j]
+        i = mod1(i + δi, Ni)
+        j = mod1(j + δj, Nj)
+        v2 = v[i, j]
+        Γ[i_out, j_out] = v2 - v1
+    end
+    Γ
+end
+
+function Base.write(g::Union{HDF5File,HDF5Group}, stats::IncrementStats)
+    g["increments"] = collect(increments(stats))
+    g["resampling_factor"] = stats.resampling_factor
+    g["resampled_grid"] = stats.resampled_grid
+    write(g_create(g, "Moments"), stats.moments)
+    write(g_create(g, "Histogram"), stats.histogram)
+    g
+end

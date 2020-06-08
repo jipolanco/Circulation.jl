@@ -9,13 +9,19 @@ abstract type AbstractFlowStats end
 
 include("moments.jl")
 include("histogram.jl")
+
 include("circulation.jl")
+include("velocity_increments.jl")
 
 # Dictionary of statistics.
 # Useful for defining flow statistics related to quantities such as velocity,
 # regularised velocity and momentum.
 const StatsDict{S} =
     Dict{VelocityLikeFields.VelocityLikeField, S} where {S <: AbstractFlowStats}
+
+Base.zero(s::S) where {S <: AbstractFlowStats} =
+    S(s.Nr, increments(s), s.resampling_factor, s.resampled_grid,
+      zero(s.moments), zero(s.histogram))
 
 Base.zero(s::SD) where {SD <: StatsDict} = SD(k => zero(v) for (k, v) in s)
 
@@ -222,8 +228,8 @@ function analyse!(stats::StatsDict, orientation::Val, gp::ParamsGP{D},
     slices_per_thread = cld(Nslices, Nth)
 
     # Allocate arrays (one per thread).
-    fields = [allocate_stats_fields(Nij_input, Nij_compute, Lij,
-                                    with_v || with_vreg, resampled_grid)
+    fields = [allocate_fields(first(values(stats)), Nij_input, Nij_compute,
+                              with_v || with_vreg, resampled_grid; L=Lij)
               for t = 1:Nth]
     stats_t = [zero(stats) for t = 1:Nth]
 
@@ -257,7 +263,8 @@ function analyse!(stats::StatsDict, orientation::Val, gp::ParamsGP{D},
     stats
 end
 
-function allocate_stats_fields(Nij_input, Nij_resampled, Lij, with_v,
+# Allocate fields common to all stats (circulation, velocity increments).
+function allocate_stats_fields(Nij_input, Nij_resampled, with_v,
                                compute_in_resampled_grid::Bool)
     FFTW.set_num_threads(1)  # make sure that plans are not threaded!
     ψ_in = Array{ComplexF64}(undef, Nij_input...)
@@ -277,7 +284,6 @@ function allocate_stats_fields(Nij_input, Nij_resampled, Lij, with_v,
         Γ = similar(ρ, Γ_size),
         ps = ps,
         vs = with_v ? similar.(ps) : nothing,
-        I = IntegralField2D(ps[1], L=Lij),
         # FFTW plans for computing momentum
         fft_plans_p = GPFields.create_fft_plans_1d!(ψ),
     )
@@ -312,19 +318,19 @@ function analyse_slice!(
         F.ps, F.ψ, gp_slice, buf=F.ψ_buf, fft_plans=F.fft_plans_p)
 
     if with_p
-        compute!(stats[VelocityLikeFields.Momentum], F.Γ, F.I, F.ps, to)
+        compute!(stats[VelocityLikeFields.Momentum], F, F.ps, to)
     end
 
     if with_vreg
         @timeit to "compute_vreg!" map((v, p) -> v .= p ./ sqrt.(F.ρ),
                                        F.vs, F.ps)
-        compute!(stats[VelocityLikeFields.RegVelocity], F.Γ, F.I, F.vs, to)
+        compute!(stats[VelocityLikeFields.RegVelocity], F, F.vs, to)
     end
 
     if with_v
         @timeit to "compute_vel!" map((v, p) -> v .= p ./ (F.ρ .+ eps_vel),
                                       F.vs, F.ps)
-        compute!(stats[VelocityLikeFields.Velocity], F.Γ, F.I, F.vs, to)
+        compute!(stats[VelocityLikeFields.Velocity], F, F.vs, to)
     end
 
     nothing
