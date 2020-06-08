@@ -65,6 +65,8 @@ parse_params_output(d::Dict) = (
     statistics = replace_env(d["statistics"] :: String),
 )
 
+parse_params_circulation(::Nothing, dims) = nothing
+
 function parse_params_circulation(d::Dict, dims)
     if !get(d, "enabled", true)
         return nothing  # circulation stats are disabled
@@ -95,7 +97,10 @@ function parse_params_circulation(d::Dict, dims)
     )
 end
 
+parse_params_increments(::Nothing, dims) = nothing
+
 function parse_params_increments(d::Dict, dims)
+    @show d
     if !get(d, "enabled", true)
         return nothing  # increment stats are disabled
     end
@@ -268,8 +273,8 @@ function main()
     end
 
     fields = parse_params_fields(p["fields"])
-    circ = parse_params_circulation(p["circulation"], fields.dims)
-    incr = parse_params_increments(p["increments"], fields.dims)
+    circ = parse_params_circulation(get(p, "circulation", nothing), fields.dims)
+    incr = parse_params_increments(get(p, "increments", nothing), fields.dims)
 
     params = (
         fields = fields,
