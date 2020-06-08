@@ -11,7 +11,7 @@ export IntegralField2D
 export prepare!
 export circulation, circulation!
 export analyse!
-export CirculationStats, CirculationFields, reset!
+export CirculationStats, VelocityLikeFields, reset!
 
 include("loops/rectangle.jl")
 include("statistics/statistics.jl")

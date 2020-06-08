@@ -155,9 +155,9 @@ function main(P::NamedTuple)
         Circulation.init_statistics(
             loop_sizes,
             which=(
-                CirculationFields.Velocity,
-                CirculationFields.RegVelocity,
-                # CirculationFields.Momentum,
+                VelocityLikeFields.Velocity,
+                VelocityLikeFields.RegVelocity,
+                # VelocityLikeFields.Momentum,
             ),
             num_moments=par.moments_pmax,
             moments_Nfrac=par.moments_Nfrac,
