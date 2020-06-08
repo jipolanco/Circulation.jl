@@ -94,6 +94,46 @@ Base.size(I::IntegralField2D) = I.N
 Base.eltype(::Type{IntegralField2D{T}}) where {T} = T
 
 """
+    LoopIterator
+
+Iterator over a set of rectangular loops of a fixed size on a 2D field.
+"""
+struct LoopIterator{
+        Inds <: Tuple{Vararg{AbstractRange,2}}
+    } <: AbstractMatrix{Rectangle{Int}}
+    rs   :: Dims{2}  # rectangle size (rx, ry)
+    step :: Int      # step between grid points (if 1, iterate over all grid points)
+    inds :: Inds
+    function LoopIterator(inds_all::Tuple{Vararg{AbstractRange,2}},
+                          rs::Dims{2}, step = 1)
+        # Half radius (truncated if rs has odd numbers...).
+        # This is just to make sure that the element Γ[i, j] corresponds to the
+        # loop centred at (x[i], y[j]), which is nice for plotting.
+        rs_half = rs .>> 1
+        inds = map(inds_all, rs_half) do ax, offset
+            # This formula is to make sure that on refined grids (when step > 1),
+            # the circulation is computed around exactly the same loops as the
+            # original grid.
+            range(first(ax), last(ax), step=step) .- offset
+        end
+        # inds = Iterators.product(inds_loops...)
+        Inds = typeof(inds)
+        new{Inds}(rs, step, inds)
+    end
+end
+
+LoopIterator(x, args...) = LoopIterator(axes(x), args...)
+
+Base.size(l::LoopIterator) = length.(l.inds)
+
+@inline function Base.getindex(l::LoopIterator, i, j)
+    a, b = l.inds
+    @boundscheck checkbounds(a, i)
+    @boundscheck checkbounds(b, j)
+    @inbounds Rectangle((a[i], b[j]), l.rs)
+end
+
+"""
     prepare!(I::IntegralField2D{T}, v)
 
 Set values of the integral fields from 2D vector field `v = (vx, vy)`.
@@ -181,18 +221,10 @@ function circulation!(
         throw(DimensionMismatch("incompatible size of output array"))
     end
 
-    # Half radius (truncated if rs has odd numbers...).
-    # This is used just to make sure that the element Γ[i, j] corresponds to
-    # the loop centred at (x[i], y[j]).
-    rs_half = rs .>> 1
+    loops = LoopIterator(I, rs, grid_step)
 
     for j ∈ axes(Γ, 2), i ∈ axes(Γ, 1)
-        # Lower left corner of loop.
-        # This formula is to make sure that on refined grids (when grid_step >
-        # 1), the circulation is computed around exactly the same loops as the
-        # original grid.
-        x0 = 1 .+ grid_step .* (i - 1, j - 1) .- rs_half
-        loop = Rectangle(x0, rs)
+        @inbounds loop = loops[i, j]
         @inbounds Γ[i, j] = circulation(loop, I)
     end
 
