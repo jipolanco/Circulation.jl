@@ -41,9 +41,9 @@ version = "0.10.3"
 
 [[Colors]]
 deps = ["ColorTypes", "FixedPointNumbers", "InteractiveUtils", "Reexport"]
-git-tree-sha1 = "2fdeb981ebcf52cd800ddb6a0aa5eac34153552d"
+git-tree-sha1 = "1e9bba7984e78aa8cdeea7f9f7cc984ad4e4b1c7"
 uuid = "5ae59095-9a9b-59fe-a467-6f913c188581"
-version = "0.12.0"
+version = "0.12.2"
 
 [[Conda]]
 deps = ["JSON", "VersionParsing"]
@@ -61,9 +61,9 @@ uuid = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 
 [[FFTW]]
 deps = ["AbstractFFTs", "FFTW_jll", "IntelOpenMP_jll", "Libdl", "LinearAlgebra", "MKL_jll", "Reexport"]
-git-tree-sha1 = "b6a74f6dfd9e9d16b765397dc90df03e5a00532e"
+git-tree-sha1 = "14536c95939aadcee44014728a459d2fe3ca9acf"
 uuid = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
-version = "1.2.1"
+version = "1.2.2"
 
 [[FFTW_jll]]
 deps = ["Libdl", "Pkg"]
@@ -137,9 +137,9 @@ version = "1.9.2+0"
 
 [[MKL_jll]]
 deps = ["IntelOpenMP_jll", "Libdl", "Pkg"]
-git-tree-sha1 = "720629cc8cbd12c146ca01b661fd1a6cf66e2ff4"
+git-tree-sha1 = "0ce9a7fa68c70cf83c49d05d2c04d91b47404b08"
 uuid = "856f044c-d86e-5d09-b602-aeab76dc8ba7"
-version = "2019.0.117+2"
+version = "2020.1.216+0"
 
 [[MacroTools]]
 deps = ["Markdown", "Random"]
@@ -154,16 +154,11 @@ uuid = "d6f4376e-aef5-505a-96c1-9c027394607a"
 [[Mmap]]
 uuid = "a63ad114-7e13-5084-954f-fe012c677804"
 
-[[OffsetArrays]]
-git-tree-sha1 = "930db8ef90483570107f2396b1ffc6680f08e8b7"
-uuid = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
-version = "1.0.4"
-
 [[Parsers]]
 deps = ["Dates", "Test"]
-git-tree-sha1 = "f0abb338b4d00306500056a3fd44c221b8473ef2"
+git-tree-sha1 = "eb3e09940c0d7ae01b01d9291ebad7b081c844d3"
 uuid = "69de0a69-1ddd-5017-9359-2bf0b02dc9f0"
-version = "1.0.4"
+version = "1.0.5"
 
 [[Pkg]]
 deps = ["Dates", "LibGit2", "Libdl", "Logging", "Markdown", "Printf", "REPL", "Random", "SHA", "UUIDs"]
@@ -222,9 +217,9 @@ uuid = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [[TimerOutputs]]
 deps = ["Printf"]
-git-tree-sha1 = "0cc8db57cb537191b02948d4fabdc09eb7f31f98"
+git-tree-sha1 = "f458ca23ff80e46a630922c555d838303e4b9603"
 uuid = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
-version = "0.5.5"
+version = "0.5.6"
 
 [[UUIDs]]
 deps = ["Random", "SHA"]
@@ -240,12 +235,12 @@ version = "1.2.0"
 
 [[Zlib_jll]]
 deps = ["Libdl", "Pkg"]
-git-tree-sha1 = "2f6c3e15e20e036ee0a0965879b31442b7ec50fa"
+git-tree-sha1 = "a2e0d558f6031002e380a90613b199e37a8565bf"
 uuid = "83775a58-1f1d-513f-b197-d71354ab007a"
-version = "1.2.11+9"
+version = "1.2.11+10"
 
 [[Zstd_jll]]
 deps = ["Libdl", "Pkg"]
-git-tree-sha1 = "f23995a6ab76d634865204fe0a4e7254d1a6d1f9"
+git-tree-sha1 = "b25b0fb10176c42e9a5a20e1f40d570ac0288d4e"
 uuid = "3161d3a3-bdf6-5164-811a-617609db77b4"
-version = "1.4.4+1"
+version = "1.4.5+0"

@@ -1,14 +1,15 @@
 """
     Moments{T}
 
-Integer moments of a scalar quantity.
+Integer moments of a scalar quantity (circulation, velocity increments, ...).
 
 ---
 
     Moments(N::Integer, Nr::Integer, ::Type{T} = Float64; Nfrac = nothing)
 
 Construct object for computation of moments.
-Moments are computed up to order `N`, for `Nr` different loop sizes.
+Moments are computed up to order `N`, for `Nr` different loop sizes (or spatial
+increments, for structure functions).
 
 Optionally, fractional exponents of the absolute value can also be computed.
 For this, set the value of `Nfrac` to the number of exponents to consider in the

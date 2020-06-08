@@ -2,7 +2,7 @@ include("moments.jl")
 include("histogram.jl")
 
 module VelocityLikeFields
-# Different vector fields from which a circulation can be computed.
+# Different velocity-like vector fields from which a circulation can be computed.
 @enum VelocityLikeField Velocity RegVelocity Momentum
 end
 

@@ -139,11 +139,12 @@ def plot_moments(ax: plt.Axes, g: h5py.Group, params, logdiff=False,
             Ml = np.log(M)
             M = (Ml[1:] - Ml[:-1])  / (rl[1:] - rl[:-1])
             # Skip largest loops (periodicity effects...)
-            x = x[:rmid_idx]
-            M = M[:rmid_idx]
         else:
             x = rs
             M[:] /= kappa **p
+
+        x = x[:rmid_idx]
+        M = M[:rmid_idx]
 
         ax.plot(x, M, label=f'$p = {p}$', **plot_kw)
 
@@ -153,12 +154,16 @@ def output_filename(filein_h5):
     return filein_h5.replace('.h5', f'{suffix}.svg')
 
 
-def plot_three_rows(axes, gbase: h5py.Group, params, vel_dict, j):
+def plot_three_rows(axes, g: h5py.Group, params, vel_dict, j):
     ax = axes[0]
     moment = 0
     plot_pdf(ax, g['Histogram'], params, moment=moment)
     ax.set_yscale('log')
-    ax.set_title(vel_dict['name'])
+    ax.set_ylim(1e-6, 2e2)
+    ax.set_xlim(-15, 15)
+
+    resampling = g['resampling_factor'][()]
+    ax.set_title(vel_dict['name'] + f' (×{resampling})')
     ax.set_xlabel('$Γ / κ$')
 
     if j == 0:
@@ -209,9 +214,8 @@ with h5py.File(STATS_FILE, 'r') as ff:
         g = g_circ[key]
         plot_three_rows(axes[:, j], g, params, val, j)
 
-
-    fname = output_filename(STATS_FILE)
-    print('Saving', fname)
-    fig.savefig(fname)
+    # fname = output_filename(STATS_FILE)
+    # print('Saving', fname)
+    # fig.savefig(fname)
 
 plt.show()
