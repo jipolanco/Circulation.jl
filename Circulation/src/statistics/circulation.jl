@@ -15,6 +15,7 @@ struct CirculationStats{Loops, M<:Moments, H<:Histogram} <: AbstractFlowStats
 end
 
 increments(s::CirculationStats) = s.loop_sizes
+statistics(::CirculationStats) = (:moments, :histogram)
 
 """
     CirculationStats(loop_sizes;
@@ -56,9 +57,10 @@ function CirculationStats(
 end
 
 function allocate_fields(::CirculationStats, args...; L)
-    data = allocate_stats_fields(args...)
+    data = allocate_common_fields(args...)
     (;
         data...,
+        Γ = similar(data.ρ, data.dims_out),
         I = IntegralField2D(data.ps[1], L=L),
     )
 end

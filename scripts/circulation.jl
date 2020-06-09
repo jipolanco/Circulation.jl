@@ -100,7 +100,6 @@ end
 parse_params_increments(::Nothing, dims) = nothing
 
 function parse_params_increments(d::Dict, dims)
-    @show d
     if !get(d, "enabled", true)
         return nothing  # increment stats are disabled
     end

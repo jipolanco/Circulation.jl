@@ -5,16 +5,19 @@
 
 Spatial increment statistics, including moments and histograms.
 """
-struct IncrementStats{Increments, M<:Moments, H<:Histogram} <: AbstractFlowStats
+struct IncrementStats{Increments,
+                      M <: NTuple{2,Moments},
+                      H <: NTuple{2,Histogram}} <: AbstractFlowStats
     Nr         :: Int         # number of increments to consider
     increments :: Increments  # length = Nr
     resampling_factor :: Int  # TODO resampling may not make much sense here...
     resampled_grid    :: Bool
-    moments    :: M
-    histogram  :: H
+    moments    :: M  # tuple (longitudinal, transverse)
+    histogram  :: H  # tuple (longitudinal, transverse)
 end
 
 increments(s::IncrementStats) = s.increments
+statistics(::IncrementStats) = (:moments, :histogram)
 
 """
     IncrementStats(increments;
@@ -41,21 +44,30 @@ function IncrementStats(
     )
     resampling_factor >= 1 || error("resampling_factor must be positive")
     Nr = length(increments)
+    # TODO
     M = Moments(num_moments, Nr, Float64; Nfrac=moments_Nfrac)
     H = Histogram(hist_edges, Nr, Int)
     IncrementStats(Nr, increments, resampling_factor, compute_in_resampled_grid,
-                   M, H)
+                   (M, zero(M)), (H, zero(H)))
 end
 
 function allocate_fields(S::IncrementStats, args...; L)
-    allocate_stats_fields(args...)
+    data = allocate_common_fields(args...)
+    dv = similar(data.ρ, data.dims_out)  # velocity increments field
+    (;
+        data...,
+        dv_para = dv,        # longitudinal increments
+        dv_perp = copy(dv),  # transverse increments
+    )
 end
 
 function compute!(stats::IncrementStats, fields, vs, to)
-    Γ = fields.Γ
+    dv_para = fields.dv_para
+    dv_perp = fields.dv_perp
+
     resampling = stats.resampling_factor
     grid_step = stats.resampled_grid ? 1 : resampling
-    @assert grid_step .* size(Γ) == size(vs[1]) "incorrect dimensions of Γ"
+    @assert grid_step .* size(dv_para) == size(vs[1]) "incorrect dimensions of dv_para"
 
     # For now, we compute longitudinal increments along the two directions.
     # Note that this is redundant, as each longitudinal increment is computed
@@ -63,15 +75,18 @@ function compute!(stats::IncrementStats, fields, vs, to)
     # TODO
     # - compute along one of the slice dimensions (this requires information on
     #   which slice we're on, to avoid repeating data)
-    # - transverse increments?
 
     for (r_ind, r) in enumerate(increments(stats))
         s = resampling * r  # increment in resampled field
         for i = 1:2
-            # Compute longitudinal velocity increments of velocity v[i].
-            @timeit to "increments" velocity_increments!(
-                Γ, vs[i], s, i, grid_step=grid_step)
-            @timeit to "statistics" update!(stats, Γ, r_ind; to=to)
+            # Compute longitudinal and transverse velocity increments of velocity v[i].
+            v = vs[i]
+            @timeit to "increments" begin
+                velocity_increments!(dv_para, v, s, i, grid_step=grid_step)
+                j = 3 - i  # transverse direction
+                velocity_increments!(dv_perp, v, s, j, grid_step=grid_step)
+            end
+            @timeit to "statistics" update!(stats, (dv_para, dv_perp), r_ind; to=to)
         end
     end
 
@@ -95,7 +110,7 @@ function velocity_increments!(Γ::AbstractMatrix, v::AbstractMatrix,
     # Note: increment `r` is in the resampled (input) field.
     δi, δj = dim == 1 ? (r, 0) : (0, r)  # increment in 2D input grid
     Ni, Nj = size(v)
-    for j_out ∈ axes(Γ, 2), i_out ∈ axes(Γ, 1)
+    @inbounds for j_out ∈ axes(Γ, 2), i_out ∈ axes(Γ, 1)
         i = inds_v[1][i_out]
         j = inds_v[2][j_out]
         v1 = v[i, j]
@@ -107,11 +122,15 @@ function velocity_increments!(Γ::AbstractMatrix, v::AbstractMatrix,
     Γ
 end
 
-function Base.write(g::Union{HDF5File,HDF5Group}, stats::IncrementStats)
-    g["increments"] = collect(increments(stats))
-    g["resampling_factor"] = stats.resampling_factor
-    g["resampled_grid"] = stats.resampled_grid
-    write(g_create(g, "Moments"), stats.moments)
-    write(g_create(g, "Histogram"), stats.histogram)
-    g
+function Base.write(gbase::Union{HDF5File,HDF5Group}, stats::IncrementStats)
+    names = ("Longitudinal", "Transverse")
+    for (i, name) in enumerate(names)
+        g = g_create(gbase, name)
+        g["increments"] = collect(increments(stats))
+        g["resampling_factor"] = stats.resampling_factor
+        g["resampled_grid"] = stats.resampled_grid
+        write(g_create(g, "Moments"), stats.moments[i])
+        write(g_create(g, "Histogram"), stats.histogram[i])
+    end
+    gbase
 end

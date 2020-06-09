@@ -16,7 +16,7 @@ For this, set the value of `Nfrac` to the number of exponents to consider in the
 range `0 < p ≤ 1`.
 For example, if `Nfrac = 10`, the exponents in `0.1:0.1:1` will be considered.
 """
-struct Moments{T, FracMatrix <: Union{Matrix{T},Nothing}}
+struct Moments{T, FracMatrix <: Union{Matrix{T},Nothing}} <: AbstractBaseStats
     Nr     :: Int  # number of "columns" of data (e.g. one per loop size)
     Nm     :: Int  # number of moments to compute (assumed to be even)
     Nm_odd :: Int  # number of odd moments to compute (= N / 2)
@@ -133,7 +133,7 @@ function update!(s::Moments, Γ, r)
     s
 end
 
-function reduce!(s::Moments, v::AbstractVector{<:Moments})
+function reduce!(s::Moments, v)
     for src in v
         @assert s.Nr == src.Nr
         @assert s.Nm == src.Nm

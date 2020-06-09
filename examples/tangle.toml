@@ -16,7 +16,7 @@ L_2pi = [1, 1, 1]    # domain size in multiples of 2π (default is [1, 1, 1])
 # The resampling is done by zero-padding ψ in Fourier space.
 # Note that the loop sizes defined in circulation.loops refer to the original
 # grid resolution, and not the resampled one.
-resampling_factor = 2  # not sure if useful for increments...
+resampling_factor = 1  # not sure if useful for increments...
 
 [physics]
 c = 1.0

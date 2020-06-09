@@ -30,19 +30,33 @@ QUANTITIES = OrderedDict(
 )
 
 
+def stats_type(g):
+    s = g.name.split('/', maxsplit=2)[1]
+    assert s in ('Circulation', 'Increments')
+    return s
+
+
 def plot_pdf(ax: plt.Axes, g: h5py.Group, params, moment=0, plot_kw={}):
-    rs = g.parent['loop_sizes'][:] / params['nxi']  # r / ξ
+    stype = stats_type(g)
+    if stype == 'Circulation':
+        r_name = 'loop_sizes'
+        normaliser = 'kappa'
+    elif stype == 'Increments':
+        r_name = 'increments'
+        normaliser = 'c'
+
+    normaliser = params[normaliser]
+    rs = g.parent[r_name][:] / params['nxi']  # r / ξ
     Nr = rs.size
-    kappa = params['kappa']
-    bins = g['bin_edges'][:] / kappa  # Γ / κ
+    bins = g['bin_edges'][:] / normaliser  # Γ / κ, or dv / c
     x = (bins[:-1] + bins[1:]) / 2
     bin_size = bins[1] - bins[0]  # assume linear bins!
 
     check_minmax = 'minimum' in g
 
     if check_minmax:
-        mins = g['minimum'][:] / kappa
-        maxs = g['maximum'][:] / kappa
+        mins = g['minimum'][:] / normaliser
+        maxs = g['maximum'][:] / normaliser
 
     for r in range(1, Nr, 5):
         Ns = g['total_samples'][r]
@@ -114,7 +128,15 @@ def plot_moments(ax: plt.Axes, g: h5py.Group, params, logdiff=False,
     elif g.name.endswith('Histogram'):
         ps, Mabs = moments_from_histogram(g)
 
-    rs = g.parent['loop_sizes'][:]  # [Nr]
+    stype = stats_type(g)
+    if stype == 'Circulation':
+        r_name = 'loop_sizes'
+        normaliser = 'kappa'
+    elif stype == 'Increments':
+        r_name = 'increments'
+        normaliser = 'c'
+
+    rs = g.parent[r_name][:]  # [Nr]
     Mabs = Mabs[:, :]  # [Nr, Np]
     Np = ps.size
 
@@ -124,7 +146,7 @@ def plot_moments(ax: plt.Axes, g: h5py.Group, params, logdiff=False,
     rmid_idx = np.searchsorted(rs, Nhalf) - 2
 
     rs = rs / params['nxi']  # r / ξ
-    kappa = params['kappa']
+    kappa = params[normaliser]
     rl = np.log(rs)
 
     for i in range(0, Np, pskip):
@@ -162,12 +184,20 @@ def plot_three_rows(axes, g: h5py.Group, params, vel_dict, j):
     ax.set_ylim(1e-6, 2e2)
     ax.set_xlim(-15, 15)
 
+    stype = stats_type(g)
+
     resampling = g['resampling_factor'][()]
     ax.set_title(vel_dict['name'] + f' (×{resampling})')
-    ax.set_xlabel('$Γ / κ$')
+
+    if stype == 'Circulation':
+        xlabel = 'Γ / κ'
+    elif stype == 'Increments':
+        xlabel = 'δ_r^∥ v / c'
+
+    ax.set_xlabel(f'${xlabel}$')
 
     if j == 0:
-        gamma = r'\left( Γ / κ \right)'
+        gamma = fr'\left( {xlabel} \right)'
         s = '' if moment == 0 else f'{gamma}^{{{moment}}} \\,'
         ax.set_ylabel(f'${s} P{gamma}$')
     if j == 1:
@@ -203,15 +233,23 @@ with h5py.File(STATS_FILE, 'r') as ff:
         kappa=g_params['kappa'][()],
         xi=g_params['xi'][()],
         nxi=g_params['nxi'][()],
+        c=g_params['c'][()],
     )
 
-    g_circ = ff['/Circulation']
+    with_increments = 'Increments' in ff
+    if with_increments:
+        g_circ = ff['/Increments']  # plot velocity increments instead
+    else:
+        g_circ = ff['/Circulation']
 
     fig, axes = plt.subplots(3, 3, figsize=(12, 8),
                              sharex='row', sharey='row')
 
     for j, (key, val) in enumerate(QUANTITIES.items()):
         g = g_circ[key]
+        if with_increments:
+            # g = g['Longitudinal']
+            g = g['Transverse']
         plot_three_rows(axes[:, j], g, params, val, j)
 
     # fname = output_filename(STATS_FILE)

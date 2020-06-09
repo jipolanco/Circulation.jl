@@ -3,7 +3,7 @@
 
 Histogram of a scalar quantity.
 """
-struct Histogram{T, Tb, BinType<:AbstractVector{Tb}}
+struct Histogram{T, Tb, BinType<:AbstractVector{Tb}} <: AbstractBaseStats
     Nr    :: Int          # number of "columns" of data (e.g. one per loop size)
     Nbins :: Int          # number of bins
     bin_edges :: BinType  # sorted list of bin edges [Nbins + 1]
@@ -59,7 +59,7 @@ function update!(s::Histogram, Γ, r)
     s
 end
 
-function reduce!(s::Histogram, v::AbstractVector{<:Histogram})
+function reduce!(s::Histogram, v)
     for src in v
         @assert s.Nr == src.Nr
         @assert s.Nbins == src.Nbins

@@ -5,11 +5,11 @@ end
 
 using .VelocityLikeFields
 
-abstract type AbstractFlowStats end
-
+abstract type AbstractBaseStats end
 include("moments.jl")
 include("histogram.jl")
 
+abstract type AbstractFlowStats end
 include("circulation.jl")
 include("velocity_increments.jl")
 
@@ -19,11 +19,15 @@ include("velocity_increments.jl")
 const StatsDict{S} =
     Dict{VelocityLikeFields.VelocityLikeField, S} where {S <: AbstractFlowStats}
 
+Broadcast.broadcastable(s::AbstractBaseStats) = Ref(s)
+
 Base.zero(s::S) where {S <: AbstractFlowStats} =
     S(s.Nr, increments(s), s.resampling_factor, s.resampled_grid,
       zero(s.moments), zero(s.histogram))
 
 Base.zero(s::SD) where {SD <: StatsDict} = SD(k => zero(v) for (k, v) in s)
+
+Base.zero(s::Tuple{Vararg{S}}) where {S <: AbstractBaseStats} = zero.(s)
 
 """
     update!(stats::AbstractFlowStats, Γ, r_ind; to=TimerOutput())
@@ -33,10 +37,13 @@ using circulation data.
 """
 function update!(stats::AbstractFlowStats, Γ, r_ind; to=TimerOutput())
     @assert r_ind ∈ 1:stats.Nr
-    @timeit to "moments"   update!(stats.moments, Γ, r_ind)
-    @timeit to "histogram" update!(stats.histogram, Γ, r_ind)
+    for name in statistics(stats)
+        @timeit to string(name) update!(getfield(stats, name), Γ, r_ind)
+    end
     stats
 end
+
+update!(s::Tuple, Γ::Tuple, args...) = map((a, b) -> update!(a, b, args...), s, Γ)
 
 """
     reduce!(stats::AbstractFlowStats, v::AbstractVector{<:AbstractFlowStats})
@@ -45,9 +52,18 @@ Reduce values from list of statistics.
 """
 function reduce!(stats::S, v::AbstractVector{<:S}) where {S <: AbstractFlowStats}
     @assert all(stats.Nr .== getfield.(v, :Nr))
-    reduce!(stats.moments, getfield.(v, :moments))
-    reduce!(stats.histogram, getfield.(v, :histogram))
+    for name in statistics(stats)
+        reduce!(getfield(stats, name), getfield.(v, name))
+    end
     stats
+end
+
+function reduce!(s::NTuple{N,S},
+                 inputs::AbstractVector{NTuple{N,S}}) where {N, S <: AbstractBaseStats}
+    for n in eachindex(s)
+        reduce!(s[n], (v[n] for v in inputs))
+    end
+    s
 end
 
 """
@@ -59,8 +75,9 @@ For instance, moment data is divided by the number of samples to obtain the
 actual moments.
 """
 function finalise!(stats::AbstractFlowStats)
-    finalise!(stats.moments)
-    finalise!(stats.histogram)
+    for name in statistics(stats)
+        finalise!.(getfield(stats, name))
+    end
     stats
 end
 
@@ -70,8 +87,9 @@ end
 Reset all statistics to zero.
 """
 function reset!(stats::AbstractFlowStats)
-    reset!(stats.moments)
-    reset!(stats.histogram)
+    for name in statistics(stats)
+        reset!.(getfield(stats, name))
+    end
     stats
 end
 
@@ -264,8 +282,8 @@ function analyse!(stats::StatsDict, orientation::Val, gp::ParamsGP{D},
 end
 
 # Allocate fields common to all stats (circulation, velocity increments).
-function allocate_stats_fields(Nij_input, Nij_resampled, with_v,
-                               compute_in_resampled_grid::Bool)
+function allocate_common_fields(Nij_input, Nij_resampled, with_v,
+                                compute_in_resampled_grid::Bool)
     FFTW.set_num_threads(1)  # make sure that plans are not threaded!
     ψ_in = Array{ComplexF64}(undef, Nij_input...)
     ψ = if Nij_input === Nij_resampled
@@ -281,7 +299,7 @@ function allocate_stats_fields(Nij_input, Nij_resampled, with_v,
         ψ = ψ,
         ψ_buf = similar(ψ),
         ρ = ρ,
-        Γ = similar(ρ, Γ_size),
+        dims_out = Γ_size,
         ps = ps,
         vs = with_v ? similar.(ps) : nothing,
         # FFTW plans for computing momentum
