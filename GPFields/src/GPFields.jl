@@ -11,6 +11,7 @@ import Mmap
 # Type definitions
 const ComplexArray{T,N} = AbstractArray{Complex{T},N} where {T<:Real,N}
 const RealArray{T,N} = AbstractArray{T,N} where {T<:Real,N}
+const RealVector{T,N} = NTuple{N, RealArray{T,N}} where {T<:Real,N}
 
 # Defines a slice in N dimensions.
 const Slice{N} = Tuple{Vararg{Union{Int,Colon}, N}} where {N}
@@ -18,6 +19,7 @@ const Slice{N} = Tuple{Vararg{Union{Int,Colon}, N}} where {N}
 include("slices.jl")
 include("params.jl")
 
+# Check size of complex scalar field data.
 function check_size(::Type{T}, dims, io_r, io_c) where {T <: Complex}
     size_r = stat(io_r).size
     size_i = stat(io_c).size
@@ -29,6 +31,23 @@ function check_size(::Type{T}, dims, io_r, io_c) where {T <: Complex}
             """
             given GP dimensions are inconsistent with file sizes
                 given dimensions:    $N  $dims
+                expected from files: $sr
+            """
+        )
+    end
+    nothing
+end
+
+# Check size of real vector field data.
+function check_size(::Type{V}, dims, io) where {T, V <: RealVector{T}}
+    size_io = stat(io).size
+    N = prod(dims) * length(dims)  # total length of full vector field
+    if sizeof(T) * N != size_io
+        sr = size_io ÷ sizeof(T)
+        error(
+            """
+            given GP dimensions are inconsistent with file sizes
+                given dimensions:    $N $dims
                 expected from files: $sr
             """
         )
@@ -98,15 +117,95 @@ function load_psi!(psi::ComplexArray{T}, gp::ParamsGP{N},
 end
 
 """
-    load_psi(gp::ParamsGP, datadir, field_index)
+    load_psi(gp::ParamsGP, datadir, field_index; slice=nothing)
 
-Load full complex ψ(x) field from files for `ψ_r` and `ψ_c`.
+Load complex ψ(x) field from files for `ψ_r` and `ψ_c`.
 
 Allocates output `psi`.
 """
 function load_psi(gp::ParamsGP, args...; slice=nothing)
     psi = Array{ComplexF64}(undef, _loaded_dims(size(gp), slice))
     load_psi!(psi, gp, args...; slice=slice) :: ComplexArray
+end
+
+function load_velocity!(vs::RealVector{T}, vin::RealVector{T},
+                        slice::Nothing) where {T}
+    @assert length.(vs) == length.(vin)
+    copy!.(vs, vin)
+    vs
+end
+
+function load_velocity!(vs::RealVector{T,N}, vin::RealVector{T,M},
+                        slice::Slice) where {T,N,M}
+    inds = view(CartesianIndices(vin[1]), slice...)
+    if size(vs[1]) != size(inds)
+        throw(DimensionMismatch(
+            "output array has different dimensions from slice: " *
+            "$(size(vs[1])) ≠ $(size(inds))"
+        ))
+    end
+    # Velocity components to load.
+    components = dims_slice(Val(M), slice)
+    @assert length(components) == N
+    for (n, c) in enumerate(components)
+        dst = vs[n]
+        src = vin[c]
+        for (i, I) in enumerate(inds)
+            dst[i] = src[I]
+        end
+    end
+    vs
+end
+
+"""
+    load_velocity!(v, gp::ParamsGP, datadir, field_index; slice=nothing)
+
+Load velocity vector field `v = (v1, v2, ...)` from binary file.
+
+Data must be in the file `\$datadir/Vel.\$field_index.dat` (where `field_index`
+is formatted using 3 digits, as in "042").
+
+In the case of a slice, only the in-plane velocity components are loaded.
+
+See also [`load_psi!`](@ref).
+"""
+function load_velocity!(vs::RealVector{T}, gp::ParamsGP{M},
+                        datadir::AbstractString,
+                        field_index; slice=nothing) where {T,M}
+    ts = @sprintf "%03d" field_index  # e.g. "007" if field_index = 7
+    fname = joinpath(datadir, "Vel.$ts.dat")
+    isfile(fname) || error("file not found: $fname")
+    check_size(typeof(vs), gp.dims, fname)
+
+    # Memory-map data from file.
+    vmap = ntuple(Val(M)) do d
+        nb = sizeof(T) * prod(gp.dims)  # size in bytes of a component
+        offset = (d - 1) * nb
+        Mmap.mmap(fname, Array{T,M}, gp.dims, offset)
+    end
+
+    load_velocity!(vs, vmap, slice)
+
+    vs
+end
+
+# Example: dims_slice(Val(3), (:, 42, :)) = (1, 3).
+@inline dims_slice(::Val{N}, ::Nothing) where {N} = ntuple(identity, Val(N))
+@inline dims_slice(::Val{N}, s::Slice{N}) where {N} = dims_slice(1, s...)
+@inline dims_slice(n::Int, ::Colon, etc...) = (n, dims_slice(n + 1, etc...)...)
+@inline dims_slice(n::Int, ::Integer, etc...) = dims_slice(n + 1, etc...)
+@inline dims_slice(n::Int) = ()
+
+"""
+    load_velocity(gp::ParamsGP, datadir, field_index; slice=nothing)
+
+Load full vector velocity field from file.
+"""
+function load_velocity(gp::ParamsGP{N}, args...; slice=nothing) where {N}
+    dims = _loaded_dims(size(gp), slice)
+    Nc = length(dims)  # number of velocity components to load
+    v = ntuple(d -> Array{Float64}(undef, dims), Val(Nc))
+    load_velocity!(v, gp, args...; slice=slice) :: RealVector
 end
 
 _loaded_dims(dims, slice::Nothing) = dims
