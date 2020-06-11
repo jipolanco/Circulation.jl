@@ -9,7 +9,7 @@ using HDF5
 
 import Base.Threads
 
-const DEFAULT_CONFIG = joinpath(@__DIR__, "..", "examples", "tangle.toml")
+const DEFAULT_CONFIG = Ref(joinpath(@__DIR__, "..", "examples", "tangle.toml"))
 
 const USAGE =
 """
@@ -26,7 +26,7 @@ function parse_commandline()
         println(USAGE)
         exit(0)
     end
-    config_file = get(ARGS, 1, DEFAULT_CONFIG)
+    config_file = get(ARGS, 1, DEFAULT_CONFIG[])
     Dict("parameter-file" => config_file)
 end
 

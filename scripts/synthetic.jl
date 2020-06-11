@@ -2,21 +2,27 @@
 
 # Generate synthetic 3D velocity field with energy spectrum E ~ k^{-α}.
 
-using FFTW
 using LinearAlgebra
-# using PyPlot
 using Random
-using UnicodePlots
+using Statistics: mean
+using StaticArrays
+
+using FFTW
 using WriteVTK
+
+import PyPlot
+const plt = PyPlot
+using LaTeXStrings
 
 sampling_freq(N, L) = 2π * N / L
 
 # Generate synthetic vector field in Fourier space.
 # The resulting energy spectrum has k^{-α} scaling.
 # Note that this works in arbitrary dimensions!
-# Also note that the generated field is compressible.
-function generate_synthetic_field_fourier(dims, α;
-                                          L = ntuple(i -> 2π, length(dims)))
+function generate_synthetic_field_fourier(
+        dims::Dims{N}, α;
+        incompressible = true,
+        L = ntuple(i -> 2π, length(dims))) where {N}
     # Wave numbers
     ks = (
         rfftfreq(dims[1], sampling_freq(dims[1], L[1])),
@@ -34,12 +40,20 @@ function generate_synthetic_field_fourier(dims, α;
     rng = MersenneTwister(42)
 
     for I in CartesianIndices(vf[1])
-        kvec = getindex.(ks, Tuple(I))
+        kvec = SVector{N}(getindex.(ks, Tuple(I)))
         k2 = sum(abs2, kvec)
+        k2 == 0 && continue
         k2 > k2max && continue
         γ = k2^pow
-        for v in vf  # for each velocity component
-            v[I] = randn(rng) * γ
+        w = randn(rng, SVector{N,ComplexF64}) * γ
+        if incompressible
+            # Remove compressible part.
+            c = conj((w ⋅ kvec) / k2)
+            w -= c * kvec
+            @assert abs(kvec ⋅ w) < eps(k2)
+        end
+        for (v, w) in zip(vf, w)
+            v[I] = w
         end
     end
 
@@ -74,15 +88,21 @@ end
 function plot_spectrum(kin, Ein, α)
     k = @view kin[2:end-1]
     E = @view Ein[2:end-1]
-    plt = lineplot(log10.(k), log10.(E), name="E")
-    lineplot!(plt, log10.(k), log10.(2 .* k.^(-α)), name="k^-$α")
-    println(plt)
+    fig, ax = plt.subplots()
+    ax.set_xscale(:log)
+    ax.set_yscale(:log)
+    α_str = replace(string(α), "//" => "/")
+    ax.plot(k, E, ".-", label=L"E")
+    ax.plot(k, 2 .* k.^(-α), color="black", ls=":",
+            label=latexstring("k^{-$α_str}"))
+    ax.legend()
+    fig
 end
 
 # Compute longitudinal structure function of order p.
 function structure_function(vs, rs; p = 2)
     S = zeros(length(rs))
-    samples = similar(S, Int)
+    samples = zeros(Int, length(rs))
     dims = size(vs[1])
     for I in CartesianIndices(vs[1])
         for (n, v) in enumerate(vs)  # for each velocity component
@@ -91,6 +111,7 @@ function structure_function(vs, rs; p = 2)
             i = I[n]
             for (m, r) in enumerate(rs)  # for each increment
                 j = mod1(i + r, N)
+                # Replace index in the n-th dimension.
                 J = CartesianIndex(ntuple(d -> (d == n ? j : I[d]), length(I)))
                 v2 = v[J]
                 S[m] += (v2 - v1)^p
@@ -100,6 +121,26 @@ function structure_function(vs, rs; p = 2)
     end
     S ./= samples
     S
+end
+
+function plot_S2(rs, S2, α; compensate=true)
+    fig, ax = plt.subplots()
+    ax.set_xscale(:log)
+    ax.set_yscale(:log)
+    n = α - 1
+    nstr = replace(string(n), "//" => "/")
+    ax.set_xlabel(L"r")
+    if compensate
+        ax.plot(rs, S2 ./ rs.^n, ".-")
+        ax.set_ylabel(latexstring("S_2(r) / r^{$nstr}"))
+    else
+        ax.plot(rs, S2, ".-", label=L"S_2")
+        ax.plot(rs, 1.2 * rs.^n, ":", color="black",
+                label=latexstring("r^{$nstr}"))
+        ax.set_ylabel(latexstring("S_2(r)"))
+        ax.legend()
+    end
+    fig
 end
 
 function save_vtk(basename, v, Ls)
@@ -113,23 +154,36 @@ function save_vtk(basename, v, Ls)
     nothing
 end
 
+function save_binary(filename, vs::Tuple)
+    open(filename, "w") do io
+        map(v -> write(io, v), vs)
+    end
+    nothing
+end
+
 function main()
-    N = 64
+    N = 256
     dims = (N, N, N)
     L = (2π, 2π, 2π)
-    α = 5 // 3
-    # α = 2
-    ks, vf = generate_synthetic_field_fourier(dims, α; L=L)
+    # α = 5 // 3
+    α = 2
+    @time ks, vf = generate_synthetic_field_fourier(
+        dims, α; L=L, incompressible=true)
     spec = spectrum(ks, vf)
     plot_spectrum(spec..., α)
-    v = brfft.(vf, N) ./ sqrt(prod(dims))
-    let rs = 1:(N ÷ 2)
-        S2 = structure_function(v, rs, p=2)
-        plt = lineplot(log10.(rs), log10.(S2),
-                       title="Structure function (p = 2)")
-        println(plt)
-    end
+    v = brfft.(vf, N)
     save_vtk("synthetic", v, L)
+    save_binary("Vel.000.dat", v)
+
+    let rs = unique([min(N ÷ 2, round(Int, 1.1^n)) for n = 0:100])
+        @time S2 = structure_function(v, rs, p=2)
+        Δx = L[1] / dims[1]
+        for comp in (false, true)
+            plot_S2(rs .* Δx, S2, α, compensate=comp)
+        end
+    end
+
+    nothing
 end
 
 main()
