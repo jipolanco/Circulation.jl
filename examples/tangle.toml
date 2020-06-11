@@ -5,6 +5,10 @@ data_index = 1       # timestep
 N = [256, 256, 256]  # resolution: can be 2D or 3D
 L_2pi = [1, 1, 1]    # domain size in multiples of 2π (default is [1, 1, 1])
 
+# If true, load velocity field ("Vel.*.dat") instead of wave function field
+# ("Psi*.dat"). The density is taken as constant and equal to 1.
+load_velocity = false
+
 # data_directory = "~/Work/simulation_data/GP/circulation/tangle/1024"
 # data_index = 100
 # N = [1024, 1024, 1024]
@@ -16,7 +20,7 @@ L_2pi = [1, 1, 1]    # domain size in multiples of 2π (default is [1, 1, 1])
 # The resampling is done by zero-padding ψ in Fourier space.
 # Note that the loop sizes defined in circulation.loops refer to the original
 # grid resolution, and not the resampled one.
-resampling_factor = 1  # not sure if useful for increments...
+resampling_factor = 1  # only useful for circulation!
 
 [physics]
 c = 1.0

@@ -51,8 +51,8 @@ function IncrementStats(
                    (M, zero(M)), (H, zero(H)))
 end
 
-function allocate_fields(S::IncrementStats, args...; L)
-    data = allocate_common_fields(args...)
+function allocate_fields(S::IncrementStats, args...; L, kwargs...)
+    data = allocate_common_fields(args...; kwargs...)
     dv = similar(data.ρ, data.dims_out)  # velocity increments field
     (;
         data...,

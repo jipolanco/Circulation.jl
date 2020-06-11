@@ -56,8 +56,8 @@ function CirculationStats(
                      compute_in_resampled_grid, M, H)
 end
 
-function allocate_fields(::CirculationStats, args...; L)
-    data = allocate_common_fields(args...)
+function allocate_fields(::CirculationStats, args...; L, kwargs...)
+    data = allocate_common_fields(args...; kwargs...)
     (;
         data...,
         Γ = similar(data.ρ, data.dims_out),

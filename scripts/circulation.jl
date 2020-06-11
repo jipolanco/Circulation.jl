@@ -53,6 +53,7 @@ function parse_params_fields(d::Dict)
         dims = tuple(dims...) :: NTuple{D,Int},
         L = tuple(L...) :: NTuple{D,Float64},
         resampling_factor = res :: Int,
+        load_velocity = get(d, "load_velocity", false) :: Bool,
     )
 end
 
@@ -231,24 +232,23 @@ function main(P::NamedTuple)
         )
     end
 
-    # First run for precompilation (-> accurate timings)
-    analyse!(
-        stats, params, P.fields.data_dir,
-        data_idx=P.fields.data_idx,
-        eps_vel=stats_params.eps_velocity,
-        to=to,
-        max_slices=1,
+    kwargs = (
+        data_idx = P.fields.data_idx,
+        load_velocity = P.fields.load_velocity,
+        eps_vel = stats_params.eps_velocity,
+        to = to,
     )
+
+    # First run for precompilation (-> accurate timings)
+    analyse!(stats, params, P.fields.data_dir; max_slices=1, kwargs...)
 
     reset_timer!(to)
     reset!(stats)
 
     analyse!(
-        stats, params, P.fields.data_dir,
-        data_idx=P.fields.data_idx,
-        eps_vel=stats_params.eps_velocity,
-        to=to,
+        stats, params, P.fields.data_dir;
         max_slices=stats_params.max_slices,
+        kwargs...,
     )
 
     println(to)
