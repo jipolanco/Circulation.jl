@@ -95,6 +95,7 @@ function plot_spectrum(kin, Ein, α)
     ax.plot(k, E, ".-", label=L"E")
     ax.plot(k, 2 .* k.^(-α), color="black", ls=":",
             label=latexstring("k^{-$α_str}"))
+    ax.set_title("Energy spectrum (synthetic field)")
     ax.legend()
     fig
 end
@@ -130,6 +131,7 @@ function plot_S2(rs, S2, α; compensate=true)
     n = α - 1
     nstr = replace(string(n), "//" => "/")
     ax.set_xlabel(L"r")
+    ax.set_title("Second-order structure function (synthetic field)")
     if compensate
         ax.plot(rs, S2 ./ rs.^n, ".-")
         ax.set_ylabel(latexstring("S_2(r) / r^{$nstr}"))
