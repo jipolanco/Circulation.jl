@@ -24,9 +24,9 @@ QUANTITIES = OrderedDict(
     RegVelocity = {
         'name': 'Regularised velocity',
     },
-    # Momentum = {
-    #     'name': 'Momentum',
-    # },
+    Momentum = {
+        'name': 'Momentum',
+    },
 )
 
 
@@ -246,6 +246,9 @@ with h5py.File(STATS_FILE, 'r') as ff:
                              sharex='row', sharey='row')
 
     for j, (key, val) in enumerate(QUANTITIES.items()):
+        if key not in g_circ:
+            print(f'Group {key} not found. Skipping.')
+            continue
         g = g_circ[key]
         if with_increments:
             # g = g['Longitudinal']

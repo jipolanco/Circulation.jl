@@ -6,8 +6,8 @@ data_index = 0       # timestep
 N = [256, 256, 256]  # resolution: can be 2D or 3D
 L_2pi = [1, 1, 1]    # domain size in multiples of 2π (default is [1, 1, 1])
 
-# If true, load velocity field ("Vel.*.dat") instead of wave function field
-# ("Psi*.dat"). The density is taken as constant and equal to 1.
+# If true, load incompressible regularised velocity field ("VI{x,y,z}_d.*.dat")
+# instead of wave function field ("Psi*.dat").
 load_velocity = true
 
 # Refinement factor of the wave-function field ψ (default is 1).
@@ -82,7 +82,7 @@ epsilon_velocity = 0
 # Parameters are mostly the same as for the circulation.
 [increments]
 enabled = true
-# max_slices = 8
+max_slices = 8
 epsilon_velocity = 0
 
     [increments.spatial_offsets]

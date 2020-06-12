@@ -204,6 +204,28 @@ function main(P::NamedTuple)
     end
 
     to = TimerOutput()
+    kwargs = (
+        data_idx = P.fields.data_idx,
+        load_velocity = P.fields.load_velocity,
+        eps_vel = stats_params.eps_velocity,
+        to = to,
+    )
+
+    # Which fields to analyse.
+    which = if kwargs.load_velocity
+        # If a velocity field is loaded
+        (
+            VelocityLikeFields.Velocity,
+        )
+    else
+        # If a wave function field is loaded
+        (
+            VelocityLikeFields.Velocity,
+            VelocityLikeFields.RegVelocity,
+            # VelocityLikeFields.Momentum,
+        )
+    end
+
     stats = let par = stats_params
         Nedges = par.hist_Nedges
         if stats_type === CirculationStats
@@ -219,11 +241,7 @@ function main(P::NamedTuple)
         Circulation.init_statistics(
             stats_type,
             loop_sizes,
-            which=(
-                VelocityLikeFields.Velocity,
-                VelocityLikeFields.RegVelocity,
-                # VelocityLikeFields.Momentum,
-            ),
+            which=which,
             num_moments=par.moments_pmax,
             moments_Nfrac=par.moments_Nfrac,
             hist_edges=edges,
@@ -231,13 +249,6 @@ function main(P::NamedTuple)
             compute_in_resampled_grid=resampled_grid,
         )
     end
-
-    kwargs = (
-        data_idx = P.fields.data_idx,
-        load_velocity = P.fields.load_velocity,
-        eps_vel = stats_params.eps_velocity,
-        to = to,
-    )
 
     # First run for precompilation (-> accurate timings)
     analyse!(stats, params, P.fields.data_dir; max_slices=1, kwargs...)
