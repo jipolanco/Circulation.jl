@@ -1,8 +1,9 @@
 #!/usr/bin/env julia
 
-# Generate synthetic 3D velocity field with energy spectrum E ~ k^{-α}.
+# Generate synthetic incompressible 3D velocity field with energy spectrum E ~ k^{-α}.
 
 using LinearAlgebra
+using Printf: @sprintf
 using Random
 using Statistics: mean
 using StaticArrays
@@ -156,9 +157,14 @@ function save_vtk(basename, v, Ls)
     nothing
 end
 
-function save_binary(filename, vs::Tuple)
-    open(filename, "w") do io
-        map(v -> write(io, v), vs)
+# Note: incompressible velocity files are named like "VIx_d.042.dat".
+function save_binary(vs::Tuple, timestep=0;
+                     filename_fmt="VI{component}_d.{timestep}.dat")
+    @assert length(vs) == 3
+    fmt = replace(filename_fmt, "{timestep}" => @sprintf("%03d", timestep))
+    for (v, c) in zip(vs, "xyz")
+        fname = replace(fmt, "{component}" => c)
+        write(fname, v)
     end
     nothing
 end
@@ -175,7 +181,7 @@ function main()
     plot_spectrum(spec..., α)
     v = brfft.(vf, N)
     save_vtk("synthetic", v, L)
-    save_binary("Vel.000.dat", v)
+    save_binary(v)
 
     let rs = unique([min(N ÷ 2, round(Int, 1.1^n)) for n = 0:100])
         @time S2 = structure_function(v, rs, p=2)
