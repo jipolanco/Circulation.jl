@@ -38,10 +38,10 @@ function check_size(::Type{T}, dims, io_r, io_c) where {T <: Complex}
     nothing
 end
 
-# Check size of real vector field data.
-function check_size(::Type{V}, dims, io) where {T, V <: RealVector{T}}
+# Check size of real scalar field data.
+function check_size(::Type{T}, dims, io) where {T}
     size_io = stat(io).size
-    N = prod(dims) * length(dims)  # total length of full vector field
+    N = prod(dims)
     if sizeof(T) * N != size_io
         sr = size_io ÷ sizeof(T)
         error(
@@ -56,8 +56,8 @@ function check_size(::Type{V}, dims, io) where {T, V <: RealVector{T}}
 end
 
 # Read the full data
-function load_psi!(psi::ComplexArray{T}, vr::RealArray{T}, vi::RealArray{T},
-                   slice::Nothing) where {T}
+function load_slice!(psi::ComplexArray{T}, vr::RealArray{T}, vi::RealArray{T},
+                     slice::Nothing) where {T}
     @assert length(psi) == length(vr) == length(vi)
     for n in eachindex(psi)
         psi[n] = Complex{T}(vr[n], vi[n])
@@ -66,8 +66,8 @@ function load_psi!(psi::ComplexArray{T}, vr::RealArray{T}, vi::RealArray{T},
 end
 
 # Read a data slice
-function load_psi!(psi::ComplexArray{T}, vr::RealArray{T}, vi::RealArray{T},
-                   slice::Slice) where {T}
+function load_slice!(psi::ComplexArray{T}, vr::RealArray{T}, vi::RealArray{T},
+                     slice::Slice) where {T}
     inds = view(CartesianIndices(vr), slice...)
     @assert size(vr) == size(vi)
     if size(psi) != size(inds)
@@ -80,6 +80,29 @@ function load_psi!(psi::ComplexArray{T}, vr::RealArray{T}, vi::RealArray{T},
         psi[n] = Complex{T}(vr[I], vi[I])
     end
     psi
+end
+
+# Variants for real values.
+function load_slice!(vs::RealArray{T}, vin::RealArray{T},
+                     slice::Nothing) where {T}
+    @assert size(vs) == size(vin)
+    copy!(vs, vin)
+    vs
+end
+
+function load_slice!(vs::RealArray{T,N}, vin::RealArray{T,M},
+                     slice::Slice) where {T,N,M}
+    inds = view(CartesianIndices(vin), slice...)
+    if size(vs) != size(inds)
+        throw(DimensionMismatch(
+            "output array has different dimensions from slice: " *
+            "$(size(vs)) ≠ $(size(inds))"
+        ))
+    end
+    for (n, I) in enumerate(inds)
+        vs[n] = vin[I]
+    end
+    vs
 end
 
 """
@@ -111,7 +134,7 @@ function load_psi!(psi::ComplexArray{T}, gp::ParamsGP{N},
     vr = Mmap.mmap(fname_r, Array{T,N}, gp.dims)
     vi = Mmap.mmap(fname_i, Array{T,N}, gp.dims)
 
-    load_psi!(psi, vr, vi, slice)
+    load_slice!(psi, vr, vi, slice)
 
     psi
 end
@@ -128,37 +151,9 @@ function load_psi(gp::ParamsGP, args...; slice=nothing)
     load_psi!(psi, gp, args...; slice=slice) :: ComplexArray
 end
 
-function load_velocity!(vs::RealVector{T}, vin::RealVector{T},
-                        slice::Nothing) where {T}
-    @assert length.(vs) == length.(vin)
-    copy!.(vs, vin)
-    vs
-end
-
-function load_velocity!(vs::RealVector{T,N}, vin::RealVector{T,M},
-                        slice::Slice) where {T,N,M}
-    inds = view(CartesianIndices(vin[1]), slice...)
-    if size(vs[1]) != size(inds)
-        throw(DimensionMismatch(
-            "output array has different dimensions from slice: " *
-            "$(size(vs[1])) ≠ $(size(inds))"
-        ))
-    end
-    # Velocity components to load.
-    components = dims_slice(Val(M), slice)
-    @assert length(components) == N
-    for (n, c) in enumerate(components)
-        dst = vs[n]
-        src = vin[c]
-        for (i, I) in enumerate(inds)
-            dst[i] = src[I]
-        end
-    end
-    vs
-end
-
 """
-    load_velocity!(v, gp::ParamsGP, datadir, field_index; slice=nothing)
+    load_velocity!(v, gp::ParamsGP, datadir, field_index;
+                   incompressible=true, slice=nothing)
 
 Load velocity vector field `v = (v1, v2, ...)` from binary file.
 
@@ -169,22 +164,21 @@ In the case of a slice, only the in-plane velocity components are loaded.
 
 See also [`load_psi!`](@ref).
 """
-function load_velocity!(vs::RealVector{T}, gp::ParamsGP{M},
-                        datadir::AbstractString,
-                        field_index; slice=nothing) where {T,M}
-    ts = @sprintf "%03d" field_index  # e.g. "007" if field_index = 7
-    fname = joinpath(datadir, "Vel.$ts.dat")
-    isfile(fname) || error("file not found: $fname")
-    check_size(typeof(vs), gp.dims, fname)
+function load_velocity!(vs::RealVector{T,N}, gp::ParamsGP{M},
+                        datadir::AbstractString, field_index;
+                        incompressible=true, slice=nothing) where {T,N,M}
+    prefix = joinpath(datadir, incompressible ? "VI" : "VC")
+    suffix = @sprintf "_d.%03d.dat" field_index
 
-    # Memory-map data from file.
-    vmap = ntuple(Val(M)) do d
-        nb = sizeof(T) * prod(gp.dims)  # size in bytes of a component
-        offset = (d - 1) * nb
-        Mmap.mmap(fname, Array{T,M}, gp.dims, offset)
+    components = dims_slice(Val(M), slice)
+    @assert length(components) == N
+    for (v, c) in zip(vs, components)
+        fname = string(prefix, "xyz"[c], suffix)
+        isfile(fname) || error("file not found: $fname")
+        check_size(T, gp.dims, fname)
+        vmap = Mmap.mmap(fname, Array{T,M}, gp.dims)
+        load_slice!(v, vmap, slice)
     end
-
-    load_velocity!(vs, vmap, slice)
 
     vs
 end
@@ -197,15 +191,17 @@ end
 @inline dims_slice(n::Int) = ()
 
 """
-    load_velocity(gp::ParamsGP, datadir, field_index; slice=nothing)
+    load_velocity(gp::ParamsGP, datadir, field_index;
+                  slice=nothing, incompressible=true)
 
 Load full vector velocity field from file.
 """
-function load_velocity(gp::ParamsGP{N}, args...; slice=nothing) where {N}
+function load_velocity(gp::ParamsGP{N}, args...;
+                       slice=nothing, kwargs...) where {N}
     dims = _loaded_dims(size(gp), slice)
     Nc = length(dims)  # number of velocity components to load
     v = ntuple(d -> Array{Float64}(undef, dims), Val(Nc))
-    load_velocity!(v, gp, args...; slice=slice) :: RealVector
+    load_velocity!(v, gp, args...; slice=slice, kwargs...) :: RealVector
 end
 
 _loaded_dims(dims, slice::Nothing) = dims
