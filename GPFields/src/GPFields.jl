@@ -7,6 +7,7 @@ using FFTW
 using HDF5
 using Printf: @sprintf
 import Mmap
+using Base.Threads
 
 # Type definitions
 const ComplexArray{T,N} = AbstractArray{Complex{T},N} where {T<:Real,N}
@@ -266,10 +267,13 @@ function compute_momentum!(
         # 1. Compute dψ/dx[n].
         kn = ks[n]
 
-        copy!(dψ, ψ)
+        @threads for n in eachindex(ψ)
+            @inbounds dψ[n] = ψ[n]
+        end
+
         plans.fw * dψ  # apply in-place FFT
 
-        @inbounds for I in CartesianIndices(dψ)
+        @inbounds @threads for I in CartesianIndices(dψ)
             kloc = kn[I[n]]
             dψ[I] *= im * kloc
         end
@@ -277,8 +281,8 @@ function compute_momentum!(
         plans.bw * dψ  # apply in-place backward FFT
 
         # 2. Evaluate momentum p[n].
-        @inbounds for i in eachindex(ψ)
-            pj[i] = α * imag(conj(ψ[i]) * dψ[i])
+        @threads for i in eachindex(ψ)
+            @inbounds pj[i] = α * imag(conj(ψ[i]) * dψ[i])
         end
     end
 
@@ -305,8 +309,8 @@ function compute_density!(ρ::AbstractArray{<:Real,N},
     size(ρ) === size(ψ) || throw(DimensionMismatch(
         "ρ and ψ must have the same dimensions: $(size(ρ)) ≠ $(size(ψ))"
     ))
-    @inbounds for n in eachindex(ρ)
-        ρ[n] = abs2(ψ[n])
+    @threads for n in eachindex(ρ)
+        @inbounds ρ[n] = abs2(ψ[n])
     end
     ρ
 end
