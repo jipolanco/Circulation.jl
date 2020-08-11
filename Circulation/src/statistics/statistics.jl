@@ -248,7 +248,6 @@ function analyse!(stats::StatsDict, orientation::Val, gp::ParamsGP{D},
     with_p = VelocityLikeFields.Momentum in stats_keys
 
     Nth = Threads.nthreads()
-    slices_per_thread = cld(Nslices, Nth)
 
     # Allocate arrays (one per thread).
     fields = [allocate_fields(first(values(stats)), Nij_input, Nij_compute,
@@ -262,24 +261,25 @@ function analyse!(stats::StatsDict, orientation::Val, gp::ParamsGP{D},
         @info "Analysing slices $slices along $s..."
     end
 
-    Threads.@threads for s in slices
-        t = Threads.threadid()
-        F = fields[t]
+    slice_ranges = Iterators.partition(slices, Nth)  # e.g. [1:40, 41:80, 81:120, ...] if Nth = 40
+    slices_per_thread = length(slice_ranges)
 
-        if t == 1
-            @info "  Thread 1: slice $s/$slices_per_thread"
-            flush(stderr)
+    for (n_range, slice_range) in enumerate(slice_ranges)
+        @info "  Slice $n_range/$slices_per_thread"
+        flush(stderr)
+        Threads.@threads for s in slice_range
+            t = Threads.threadid()
+            F = fields[t]
+
+            # Load ψ at selected slice.
+            slice = make_slice(gp.dims, orientation, s)
+            timer = t == 1 ? to : TimerOutput()
+
+            analyse_slice!(
+                stats_t[t], slice, gp, F, timer, data_params, eps_vel,
+                resampling_factor, (with_p, with_vreg, with_v),
+            )
         end
-
-        # Load ψ at selected slice.
-        slice = make_slice(gp.dims, orientation, s)
-        timer = t == 1 ? to : TimerOutput()
-
-        analyse_slice!(
-            stats_t[t], slice, gp, F, timer, data_params, eps_vel,
-            resampling_factor,
-            (with_p, with_vreg, with_v)
-        )
     end
 
     @timeit to "reduce!" reduce!(stats, stats_t)
