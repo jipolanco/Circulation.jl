@@ -65,25 +65,26 @@ function allocate_fields(::CirculationStats, args...; L, kwargs...)
     )
 end
 
-function compute!(stats::CirculationStats, fields, vs, to)
+function compute!(stats_t::AbstractVector{<:CirculationStats}, fields, vs, to)
     Γ = fields.Γ
     Ip = fields.I
 
     # Set integral values with momentum data.
     @timeit to "prepare!" prepare!(Ip, vs)
 
-    resampling = stats.resampling_factor
-    grid_step = stats.resampled_grid ? 1 : resampling
+    st1 = first(stats_t)
+    resampling = st1.resampling_factor
+    grid_step = st1.resampled_grid ? 1 : resampling
     @assert grid_step .* size(Γ) == size(vs[1]) "incorrect dimensions of Γ"
 
-    for (r_ind, r) in enumerate(increments(stats))
+    for (r_ind, r) in enumerate(increments(st1))
         s = resampling * r  # loop size in resampled field
         @timeit to "circulation!" circulation!(
             Γ, Ip, (s, s), grid_step=grid_step)
-        @timeit to "statistics" update!(stats, Γ, r_ind; to=to)
+        @timeit to "statistics" update!(stats_t, Γ, r_ind; to=to)
     end
 
-    stats
+    stats_t
 end
 
 function Base.write(g::Union{HDF5File,HDF5Group}, stats::CirculationStats)

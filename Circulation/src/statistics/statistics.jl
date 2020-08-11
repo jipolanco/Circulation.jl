@@ -34,11 +34,32 @@ Base.zero(s::Tuple{Vararg{S}}) where {S <: AbstractBaseStats} = zero.(s)
 
 Update circulation data associated to a given loop size (with index `r_ind`)
 using circulation data.
+
+For threaded computation, `stats` should be a vector of `AbstractFlowStats`,
+with length equal to the number of threads.
 """
 function update!(stats::AbstractFlowStats, Γ, r_ind; to=TimerOutput())
     @assert r_ind ∈ 1:stats.Nr
     for name in statistics(stats)
         @timeit to string(name) update!(getfield(stats, name), Γ, r_ind)
+    end
+    stats
+end
+
+function update!(stats::AbstractVector{<:AbstractFlowStats}, Γ, r_ind;
+                 to=TimerOutput())
+    Nth = nthreads()
+    @assert length(stats) == Nth
+    N = length(Γ)
+    # Split Γ field among threads.
+    Γ_v = vec(Γ)
+    Γ_inds = collect(Iterators.partition(1:N, div(N, Nth, RoundUp)))
+    @assert length(Γ_inds) == Nth
+    @threads for t = 1:Nth
+        timer = t == 1 ? to : TimerOutput()
+        s = stats[t]
+        Γ_t = view(Γ_v, Γ_inds[t])
+        update!(s, Γ_t, r_ind; to=timer)
     end
     stats
 end
@@ -231,8 +252,6 @@ function analyse!(stats::StatsDict, orientation::Val, gp::ParamsGP{D},
         r, grid
     end
 
-    slices = 1:Nslices
-
     # Slice dimensions.
     # Example: in 3D, if orientation = 2, this is (1, 3).
     i, j = included_dimensions(Val(D), orientation)
@@ -247,40 +266,30 @@ function analyse!(stats::StatsDict, orientation::Val, gp::ParamsGP{D},
     with_vreg = VelocityLikeFields.RegVelocity in stats_keys
     with_p = VelocityLikeFields.Momentum in stats_keys
 
-    Nth = Threads.nthreads()
+    # Allocate arrays.
+    fields = allocate_fields(
+        first(values(stats)), Nij_input, Nij_compute, with_v || with_vreg,
+        resampled_grid; L=Lij, load_velocity=load_velocity,
+    )
 
-    # Allocate arrays (one per thread).
-    fields = [allocate_fields(first(values(stats)), Nij_input, Nij_compute,
-                              with_v || with_vreg, resampled_grid;
-                              L=Lij, load_velocity=load_velocity)
-              for t = 1:Nth]
+    Nth = nthreads()
     stats_t = [zero(stats) for t = 1:Nth]
+
+    slices = 1:Nslices
 
     let s = orientation_str(orientation)
         println(stderr)
         @info "Analysing slices $slices along $s..."
     end
 
-    slice_ranges = Iterators.partition(slices, Nth)  # e.g. [1:40, 41:80, 81:120, ...] if Nth = 40
-    slices_per_thread = length(slice_ranges)
-
-    for (n_range, slice_range) in enumerate(slice_ranges)
-        @info "  Slice $n_range/$slices_per_thread"
+    for s in slices
+        @info "  Slice $s/$Nslices"
         flush(stderr)
-        Threads.@threads for s in slice_range
-            t = Threads.threadid()
-            F = fields[t]
-
-            # Load ψ at selected slice.
-            slice = make_slice(gp.dims, orientation, s)
-            timer = t == 1 ? to : TimerOutput()
-
-            analyse_slice!(
-                stats_t[t], slice, gp, F, timer, data_params, eps_vel,
-                resampling_factor, (with_p, with_vreg, with_v),
-            )
-        end
-        GC.gc()  # force garbage collector run to avoid memory issues
+        slice = make_slice(gp.dims, orientation, s)
+        analyse_slice!(
+            stats_t, slice, gp, fields, to, data_params, eps_vel,
+            resampling_factor, (with_p, with_vreg, with_v),
+        )
     end
 
     @timeit to "reduce!" reduce!(stats, stats_t)
@@ -292,7 +301,7 @@ end
 function allocate_common_fields(Nij_input, Nij_resampled, with_v,
                                 compute_in_resampled_grid::Bool;
                                 load_velocity)
-    FFTW.set_num_threads(1)  # make sure that plans are not threaded!
+    FFTW.set_num_threads(nthreads())  # make sure that FFTs are threaded
     if load_velocity
         ψ_in = nothing
         ψ = nothing
@@ -377,19 +386,26 @@ function analyse_slice!(
     end
 
     if with_p
-        compute!(stats[VelocityLikeFields.Momentum], F, F.ps, to)
+        # Get all Momentum stats (one per thread)
+        let stats = getindex.(stats, VelocityLikeFields.Momentum)
+            compute!(stats, F, F.ps, to)
+        end
     end
 
     if with_vreg
         @timeit to "compute_vreg!" map((v, p) -> v .= p ./ sqrt.(F.ρ),
                                        F.vs, F.ps)
-        compute!(stats[VelocityLikeFields.RegVelocity], F, F.vs, to)
+        let stats = getindex.(stats, VelocityLikeFields.RegVelocity)
+            compute!(stats, F, F.vs, to)
+        end
     end
 
     if with_v
         @timeit to "compute_vel!" map((v, p) -> v .= p ./ (F.ρ .+ eps_vel),
                                       F.vs, F.ps)
-        compute!(stats[VelocityLikeFields.Velocity], F, F.vs, to)
+        let stats = getindex.(stats, VelocityLikeFields.Velocity)
+            compute!(stats, F, F.vs, to)
+        end
     end
 
     nothing

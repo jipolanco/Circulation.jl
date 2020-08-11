@@ -4,6 +4,7 @@ using FFTW
 using HDF5
 using LinearAlgebra: mul!
 using TimerOutputs
+using Base.Threads
 
 using GPFields
 
@@ -221,9 +222,11 @@ function circulation!(
         throw(DimensionMismatch("incompatible size of output array"))
     end
     loops = LoopIterator(I, rs, grid_step)
-    for j ∈ axes(Γ, 2), i ∈ axes(Γ, 1)
-        @inbounds loop = loops[i, j]
-        @inbounds Γ[i, j] = circulation(loop, I)
+    @threads for j ∈ axes(Γ, 2)
+        for i ∈ axes(Γ, 1)
+            @inbounds loop = loops[i, j]
+            @inbounds Γ[i, j] = circulation(loop, I)
+        end
     end
     Γ
 end
