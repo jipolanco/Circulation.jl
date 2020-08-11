@@ -292,13 +292,12 @@ function allocate_common_fields(Nij_input, Nij_resampled, with_v,
                                 compute_in_resampled_grid::Bool;
                                 load_velocity)
     FFTW.set_num_threads(1)  # make sure that plans are not threaded!
-    ρ = Array{Float64}(undef, Nij_input...)
     if load_velocity
         ψ_in = nothing
         ψ = nothing
         ψ_buf = nothing
         fft_plans_p = nothing
-        fill!(ρ, 1)
+        ρ = ones(Float64, Nij_input...)
     else
         ψ_in = Array{ComplexF64}(undef, Nij_input...)
         ψ = if Nij_input === Nij_resampled
@@ -307,6 +306,7 @@ function allocate_common_fields(Nij_input, Nij_resampled, with_v,
             similar(ψ_in, Nij_resampled)
         end
         ψ_buf = similar(ψ)
+        ρ = similar(ψ, Float64)
         fft_plans_p = GPFields.create_fft_plans_1d!(ψ)
     end
     Γ_size = compute_in_resampled_grid ? Nij_resampled : Nij_input
