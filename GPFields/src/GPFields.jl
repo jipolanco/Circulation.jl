@@ -362,13 +362,15 @@ function resample_field_fourier!(dst::ComplexArray{T,N}, src::ComplexArray{T,N},
     scale = length(dst) / length(src)
 
     # 1. Set everything to zero.
-    fill!(dst, 0)
+    @threads for n in eachindex(dst)
+        @inbounds dst[n] = 0
+    end
 
     # 2. Copy all modes in src.
-    for I in CartesianIndices(src)
+    @threads for I in CartesianIndices(src)
         is = Tuple(I)
         js = getindex.(kmap, is)
-        dst[js...] = scale * src[I]
+        @inbounds dst[js...] = scale * src[I]
     end
 
     dst

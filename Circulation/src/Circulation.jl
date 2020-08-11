@@ -58,9 +58,9 @@ struct IntegralField2D{T, PlansFW, PlansBW}
     plans_fw :: PlansFW  # forwards
     plans_bw :: PlansBW  # backwards
 
-    # Buffer arrays for FFTs.
-    bufs :: NTuple{2,Vector{T}}  # lengths: Nx, Ny
-    bufs_f :: NTuple{2,Vector{Complex{T}}}
+    # Buffer arrays for FFTs (one per thread).
+    bufs :: NTuple{2,Matrix{T}}  # lengths: Nx, Ny
+    bufs_f :: NTuple{2,Matrix{Complex{T}}}
 
     # Wave numbers
     ks :: NTuple{2,Frequencies{Float64}}
@@ -73,12 +73,14 @@ struct IntegralField2D{T, PlansFW, PlansBW}
         fs = 2pi .* Ns ./ L  # sampling frequency
         ks = rfftfreq.(Ns, fs)
 
-        bufs = Vector{T}.(undef, Ns)
-        bufs_f = Vector{Complex{T}}.(undef, length.(ks))
+        Nth = nthreads()
+        bufs = Array{T}.(undef, Ns, Nth)
+        bufs_f = Array{Complex{T}}.(undef, length.(ks), Nth)
 
-        FFTW.set_num_threads(1)  # make sure that plans are not threaded!
-        plans_fw = plan_rfft.(bufs)
-        plans_bw = plan_irfft.(bufs_f, Ns)
+        # Make sure that plans are NOT threaded (these are small transforms)
+        FFTW.set_num_threads(1)
+        plans_fw = plan_rfft.(view.(bufs, :, 1))
+        plans_bw = plan_irfft.(view.(bufs_f, :, 1), Ns)
 
         Pfw = typeof(plans_fw)
         Pbw = typeof(plans_bw)
@@ -156,23 +158,28 @@ function prepare!(I::IntegralField2D, u, ::Val{c}) where {c}
     k = I.ks[c]
     plan_fw = I.plans_fw[c]
     plan_bw = I.plans_bw[c]
-    ubuf = I.bufs[c]
-    uf = I.bufs_f[c]
+    ubuf_t = I.bufs[c]
+    uf_t = I.bufs_f[c]
     w = I.w[c]
 
     @assert k[1] == 0
     Nk = length(k)
 
     Ns = size(w)
-    @assert length(ubuf) == size(u, c) == Ns[c]
+    @assert size(ubuf_t, 1) == size(u, c) == Ns[c]
 
     Nc, Nother = (c === 1) ? (Ns[1], Ns[2]) : (Ns[2], Ns[1])
 
-    for j = 1:Nother
+    @threads for j = 1:Nother
+        t = threadid()
+        ubuf = view(ubuf_t, :, t)
+        uf = view(uf_t, :, t)
+
         for i = 1:Nc
             ind = (c === 1) ? CartesianIndex((i, j)) : CartesianIndex((j, i))
             ubuf[i] = u[ind]
         end
+
         mul!(uf, plan_fw, ubuf)  # apply FFT
 
         # Copy mean value and then set it to zero.
@@ -185,6 +192,7 @@ function prepare!(I::IntegralField2D, u, ::Val{c}) where {c}
         end
 
         mul!(ubuf, plan_bw, uf)  # apply inverse FFT
+
         for i = 1:Nc
             ind = (c === 1) ? CartesianIndex((i, j)) : CartesianIndex((j, i))
             w[ind] = ubuf[i]
