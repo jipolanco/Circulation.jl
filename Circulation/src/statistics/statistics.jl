@@ -280,6 +280,7 @@ function analyse!(stats::StatsDict, orientation::Val, gp::ParamsGP{D},
                 resampling_factor, (with_p, with_vreg, with_v),
             )
         end
+        GC.gc()  # force garbage collector run to avoid memory issues
     end
 
     @timeit to "reduce!" reduce!(stats, stats_t)
