@@ -302,7 +302,6 @@ Compute density from ψ.
 """
 function compute_density!(ρ::AbstractArray{<:Real,N},
                           ψ::AbstractArray{<:Complex,N}) where {N}
-    @show size(ρ) size(ψ)
     size(ρ) === size(ψ) || throw(DimensionMismatch(
         "ρ and ψ must have the same dimensions: $(size(ρ)) ≠ $(size(ψ))"
     ))
