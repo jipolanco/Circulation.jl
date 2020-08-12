@@ -60,8 +60,8 @@ end
 function load_slice!(psi::ComplexArray{T}, vr::RealArray{T}, vi::RealArray{T},
                      slice::Nothing) where {T}
     @assert length(psi) == length(vr) == length(vi)
-    for n in eachindex(psi)
-        psi[n] = Complex{T}(vr[n], vi[n])
+    @threads for n in eachindex(psi)
+        @inbounds psi[n] = Complex{T}(vr[n], vi[n])
     end
     psi
 end
@@ -77,8 +77,9 @@ function load_slice!(psi::ComplexArray{T}, vr::RealArray{T}, vi::RealArray{T},
             "$(size(psi)) ≠ $(size(inds))"
         ))
     end
-    for (n, I) in enumerate(inds)
-        psi[n] = Complex{T}(vr[I], vi[I])
+    @threads for n in eachindex(inds)
+        @inbounds I = inds[n]
+        @inbounds psi[n] = Complex{T}(vr[I], vi[I])
     end
     psi
 end
@@ -87,7 +88,9 @@ end
 function load_slice!(vs::RealArray{T}, vin::RealArray{T},
                      slice::Nothing) where {T}
     @assert size(vs) == size(vin)
-    copy!(vs, vin)
+    @threads for n in eachindex(vs)
+        @inbounds vs[n] = vin[n]
+    end
     vs
 end
 
@@ -100,8 +103,9 @@ function load_slice!(vs::RealArray{T,N}, vin::RealArray{T,M},
             "$(size(vs)) ≠ $(size(inds))"
         ))
     end
-    for (n, I) in enumerate(inds)
-        vs[n] = vin[I]
+    @threads for n in eachindex(inds)
+        @inbounds I = inds[n]
+        @inbounds vs[n] = vin[I]
     end
     vs
 end
@@ -225,10 +229,10 @@ function create_fft_plans_1d!(ψ::ComplexArray{T,D}) where {T,D}
 end
 
 """
-    compute_momentum!(p::NTuple, ψ::ComplexArray, gp::ParamsGP;
-                      buf=similar(ψ),
-                      fft_plans = create_fft_plans_1d!(ψ),
-                      )
+    compute_momentum!(
+        p::NTuple, ψ::ComplexArray, gp::ParamsGP;
+        buf=similar(ψ), fft_plans = create_fft_plans_1d!(ψ),
+    )
 
 Compute momentum from complex array ψ.
 
