@@ -223,7 +223,7 @@ Returns `N` pairs of forward/backward plans along each dimension.
 function create_fft_plans_1d!(ψ::ComplexArray{T,D}) where {T,D}
     FFTW.set_num_threads(nthreads())
     ntuple(Val(D)) do d
-        p = plan_fft!(ψ, d)
+        p = plan_fft!(ψ, d, flags=FFTW.MEASURE)
         (fw=p, bw=inv(p))
     end
 end

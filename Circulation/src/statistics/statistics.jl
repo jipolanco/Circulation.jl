@@ -319,7 +319,8 @@ function allocate_common_fields(Nij_input, Nij_resampled, with_v,
         ψ_buf = similar(ψ)
         ρ = similar(ψ, Float64)
         fft_plans_resample = (
-            fw = plan_fft!(ψ_in), bw = plan_ifft!(ψ),
+            fw = plan_fft!(ψ_in, flags=FFTW.MEASURE),
+            bw = plan_ifft!(ψ, flags=FFTW.MEASURE),
         )
         fft_plans_p = GPFields.create_fft_plans_1d!(ψ)
     end

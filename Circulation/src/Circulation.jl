@@ -79,8 +79,8 @@ struct IntegralField2D{T, PlansFW, PlansBW}
 
         # Make sure that plans are NOT threaded (these are small transforms)
         FFTW.set_num_threads(1)
-        plans_fw = plan_rfft.(view.(bufs, :, 1))
-        plans_bw = plan_irfft.(view.(bufs_f, :, 1), Ns)
+        plans_fw = plan_rfft.(view.(bufs, :, 1), flags=FFTW.MEASURE)
+        plans_bw = plan_irfft.(view.(bufs_f, :, 1), Ns, flags=FFTW.MEASURE)
 
         Pfw = typeof(plans_fw)
         Pbw = typeof(plans_bw)
