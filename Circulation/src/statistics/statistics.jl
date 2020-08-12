@@ -307,6 +307,7 @@ function allocate_common_fields(Nij_input, Nij_resampled, with_v,
         ψ = nothing
         ψ_buf = nothing
         fft_plans_p = nothing
+        fft_plans_resample = nothing
         ρ = ones(Float64, Nij_input...)
     else
         ψ_in = Array{ComplexF64}(undef, Nij_input...)
@@ -317,6 +318,9 @@ function allocate_common_fields(Nij_input, Nij_resampled, with_v,
         end
         ψ_buf = similar(ψ)
         ρ = similar(ψ, Float64)
+        fft_plans_resample = (
+            fw = plan_fft!(ψ_in), bw = plan_ifft!(ψ),
+        )
         fft_plans_p = GPFields.create_fft_plans_1d!(ψ)
     end
     Γ_size = compute_in_resampled_grid ? Nij_resampled : Nij_input
@@ -329,13 +333,15 @@ function allocate_common_fields(Nij_input, Nij_resampled, with_v,
         dims_out = Γ_size,
         ps = ps,
         vs = with_v ? similar.(ps) : nothing,
+        # FFTW plans for resampling
+        fft_plans_resample = fft_plans_resample,
         # FFTW plans for computing momentum
         fft_plans_p = fft_plans_p,
     )
 end
 
 function load_psi_slice!(ψ::AbstractArray, ψ_in::AbstractArray, gp, slice,
-                         data_params, resampling_factor, to)
+                         data_params, plans, resampling_factor, to)
     @assert all(size(ψ) .÷ size(ψ_in) .== resampling_factor)
     @timeit to "load_psi!" GPFields.load_psi!(
         ψ_in, gp, data_params.directory, data_params.index, slice=slice)
@@ -349,9 +355,9 @@ function load_psi_slice!(ψ::AbstractArray, ψ_in::AbstractArray, gp, slice,
 
     @timeit to "resample ψ" begin
         # Note: resample_field_fourier! works with fields in Fourier space.
-        fft!(ψ_in)
+        plans.fw * ψ_in  # in-place FFT
         GPFields.resample_field_fourier!(ψ, ψ_in, gp_slice_in)
-        ifft!(ψ)
+        plans.bw * ψ
     end
 
     gp_slice
@@ -379,7 +385,7 @@ function analyse_slice!(
         end
     else
         gp_slice = load_psi_slice!(F.ψ, F.ψ_in, gp, slice, data_params,
-                                   resampling_factor, to)
+                                   F.fft_plans_resample, resampling_factor, to)
         @timeit to "compute_density!" GPFields.compute_density!(F.ρ, F.ψ)
         @timeit to "compute_momentum!" GPFields.compute_momentum!(
             F.ps, F.ψ, gp_slice, buf=F.ψ_buf, fft_plans=F.fft_plans_p)

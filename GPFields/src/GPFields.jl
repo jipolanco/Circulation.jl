@@ -217,6 +217,7 @@ Create in-place complex-to-complex FFT plans.
 Returns `N` pairs of forward/backward plans along each dimension.
 """
 function create_fft_plans_1d!(ψ::ComplexArray{T,D}) where {T,D}
+    FFTW.set_num_threads(nthreads())
     ntuple(Val(D)) do d
         p = plan_fft!(ψ, d)
         (fw=p, bw=inv(p))
@@ -267,8 +268,8 @@ function compute_momentum!(
         # 1. Compute dψ/dx[n].
         kn = ks[n]
 
-        @threads for n in eachindex(ψ)
-            @inbounds dψ[n] = ψ[n]
+        @threads for i in eachindex(ψ)
+            @inbounds dψ[i] = ψ[i]
         end
 
         plans.fw * dψ  # apply in-place FFT
