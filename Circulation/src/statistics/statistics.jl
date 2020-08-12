@@ -400,22 +400,40 @@ function analyse_slice!(
     end
 
     if with_vreg
-        @timeit to "compute_vreg!" map((v, p) -> v .= p ./ sqrt.(F.ρ),
-                                       F.vs, F.ps)
+        @timeit to "compute_vreg!" compute_vreg!(F.vs, F.ps, F.ρ)
         let stats = getindex.(stats, VelocityLikeFields.RegVelocity)
             compute!(stats, F, F.vs, to)
         end
     end
 
     if with_v
-        @timeit to "compute_vel!" map((v, p) -> v .= p ./ (F.ρ .+ eps_vel),
-                                      F.vs, F.ps)
+        @timeit to "compute_vel!" compute_velocity!(F.vs, F.ps, F.ρ, eps_vel)
         let stats = getindex.(stats, VelocityLikeFields.Velocity)
             compute!(stats, F, F.vs, to)
         end
     end
 
     nothing
+end
+
+function compute_vreg!(vs::Tuple, ps::Tuple, ρ)
+    @inbounds @threads for n in eachindex(ρ)
+        one_over_sqrt_rho = inv(sqrt(ρ[n]))
+        for (v, p) in zip(vs, ps)  # for each velocity component
+            v[n] = one_over_sqrt_rho * p[n]
+        end
+    end
+    vs
+end
+
+function compute_velocity!(vs::Tuple, ps::Tuple, ρ, eps_vel = 0)
+    @inbounds @threads for n in eachindex(ρ)
+        one_over_rho = inv(ρ[n] + eps_vel)
+        for (v, p) in zip(vs, ps)  # for each velocity component
+            v[n] = one_over_rho * p[n]
+        end
+    end
+    vs
 end
 
 function included_dimensions(::Val{N}, ::Val{s}) where {N,s}
