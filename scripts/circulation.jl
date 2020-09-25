@@ -264,10 +264,13 @@ function main(P::NamedTuple)
 
     println(to)
 
-    @info "Saving $(P.output.statistics)"
-    h5open(P.output.statistics, "w") do ff
-        write(g_create(ff, "ParamsGP"), params)
-        write(g_create(ff, output_name), stats)
+    let outfile = P.ouput.statistics
+        mkpath(dirname(outfile))
+        @info "Saving $(outfile)"
+        h5open(outfile, "w") do ff
+            write(g_create(ff, "ParamsGP"), params)
+            write(g_create(ff, output_name), stats)
+        end
     end
 
     nothing
