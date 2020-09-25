@@ -264,7 +264,7 @@ function main(P::NamedTuple)
 
     println(to)
 
-    let outfile = P.ouput.statistics
+    let outfile = P.output.statistics
         mkpath(dirname(outfile))
         @info "Saving $(outfile)"
         h5open(outfile, "w") do ff
