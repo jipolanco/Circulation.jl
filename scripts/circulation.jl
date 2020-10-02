@@ -1,7 +1,7 @@
 #!/usr/bin/env julia
 
 using GPFields
-using Circulation
+using GPStatistics
 
 import Pkg.TOML
 using TimerOutputs
@@ -238,7 +238,7 @@ function main(P::NamedTuple)
             edges = LinRange(-M * c, M * c, Nedges)
         end
 
-        Circulation.init_statistics(
+        init_statistics(
             stats_type,
             loop_sizes,
             which=which,

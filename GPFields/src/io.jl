@@ -37,6 +37,7 @@ end
 # Read the full data
 function load_slice!(psi::ComplexArray{T}, vr::RealArray{T}, vi::RealArray{T},
                      slice::Nothing) where {T}
+    @show length(psi) length(vr) length(vi)
     @assert length(psi) == length(vr) == length(vi)
     @threads for n in eachindex(psi)
         @inbounds psi[n] = Complex{T}(vr[n], vi[n])
@@ -90,6 +91,7 @@ end
 
 """
     load_psi!(psi, gp::ParamsGP, datadir, field_index; slice=nothing)
+    load_psi!(psi, gp::ParamsGP, filename_pat; slice=nothing)
 
 Load complex ψ(x) field from files for `ψ_r` and `ψ_c`.
 
@@ -97,14 +99,26 @@ Writes data to preallocated output `psi`.
 
 The optional `slice` parameter may designate a slice of the domain,
 such as `(:, 42, :)`.
-"""
-function load_psi!(psi::ComplexArray{T}, gp::ParamsGP{N},
-                   datadir::AbstractString, field_index::Integer;
-                   slice::Union{Nothing,Slice{N}} = nothing) where {T,N}
-    ts = @sprintf "%03d" field_index  # e.g. "007" if field_index = 7
 
-    fname_r = joinpath(datadir, "ReaPsi.$ts.dat")
-    fname_i = joinpath(datadir, "ImaPsi.$ts.dat")
+In the second variant, a filename pattern should be passed.
+The pattern must contain a `*` placeholder that will be replaced by "Rea" and
+"Ima", for the real and imaginary parts of ψ.
+"""
+function load_psi!(psi::ComplexArray, gp::ParamsGP,
+                   datadir::AbstractString, field_index::Integer;
+                   kw...)
+    ts = @sprintf "%03d" field_index  # e.g. "007" if field_index = 7
+    load_psi!(psi, gp, joinpath(datadir, "*Psi.$ts.dat"); kw...)
+end
+
+function load_psi!(psi::ComplexArray{T}, gp::ParamsGP{N},
+                   filename_pat::AbstractString;
+                   slice::Union{Nothing,Slice{N}} = nothing) where {T,N}
+    if '*' ∉ filename_pat
+        throw(ArgumentError("filename pattern must contain '*'"))
+    end
+    fname_r = replace(filename_pat, '*' => "Rea")
+    fname_i = replace(filename_pat, '*' => "Ima")
 
     for fname in (fname_r, fname_i)
         isfile(fname) || error("file not found: $fname")
@@ -124,10 +138,13 @@ end
 
 """
     load_psi(gp::ParamsGP, datadir, field_index; slice=nothing)
+    load_psi(gp::ParamsGP, filename_pat; slice=nothing)
 
 Load complex ψ(x) field from files for `ψ_r` and `ψ_c`.
 
 Allocates output `psi`.
+
+See also [`load_psi!`](@ref).
 """
 function load_psi(gp::ParamsGP, args...; slice=nothing)
     psi = Array{ComplexF64}(undef, _loaded_dims(size(gp), slice))

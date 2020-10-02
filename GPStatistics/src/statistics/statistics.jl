@@ -387,8 +387,8 @@ function analyse_slice!(
     else
         gp_slice = load_psi_slice!(F.ψ, F.ψ_in, gp, slice, data_params,
                                    F.fft_plans_resample, resampling_factor, to)
-        @timeit to "compute_density!" GPFields.compute_density!(F.ρ, F.ψ)
-        @timeit to "compute_momentum!" GPFields.compute_momentum!(
+        @timeit to "density!" GPFields.density!(F.ρ, F.ψ)
+        @timeit to "momentum!" GPFields.momentum!(
             F.ps, F.ψ, gp_slice, buf=F.ψ_buf, fft_plans=F.fft_plans_p)
     end
 

@@ -1,6 +1,6 @@
 [fields]
 # Path to data. Note that environment variables are allowed.
-data_directory = "$HOME/Dropbox/circulation/data/tangle/256"
+data_directory = "$HOME/Dropbox/circulation/data/tangle/256/fields"
 data_index = 1       # timestep
 N = [256, 256, 256]  # resolution: can be 2D or 3D
 L_2pi = [1, 1, 1]    # domain size in multiples of 2π (default is [1, 1, 1])
@@ -32,7 +32,7 @@ statistics = "tangle_256.h5"
 
 [circulation]
 # Compute circulation statistics?
-enabled = false
+enabled = true
 
 # Maximum number of slices per orientation to analyse.
 # If 0 (default), all available slices are analysed.
@@ -84,7 +84,7 @@ epsilon_velocity = 0
 # Velocity increment statistics.
 # Parameters are mostly the same as for the circulation.
 [increments]
-enabled = true
+enabled = false
 max_slices = 8
 epsilon_velocity = 0
 

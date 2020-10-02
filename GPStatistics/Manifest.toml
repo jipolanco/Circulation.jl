@@ -38,7 +38,7 @@ uuid = "f5851436-0d7a-5f13-b9de-f02708fd171a"
 version = "3.3.9+5"
 
 [[GPFields]]
-deps = ["FFTW", "HDF5", "Mmap", "Printf"]
+deps = ["FFTW", "HDF5", "LinearAlgebra", "Mmap", "Printf", "Reexport"]
 path = "../GPFields"
 uuid = "1ff924b9-96ae-4c53-b8fa-3ca72644558a"
 version = "0.1.0"

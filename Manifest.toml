@@ -27,12 +27,6 @@ git-tree-sha1 = "aa9ef39b54a168c3df1b2911e7797e4feee50fbe"
 uuid = "0b7ba130-8d10-5ba8-a3d6-c5182647fed9"
 version = "1.14.3+1"
 
-[[Circulation]]
-deps = ["FFTW", "GPFields", "HDF5", "LinearAlgebra", "TimerOutputs"]
-path = "Circulation"
-uuid = "f9745a5e-b5bf-4554-ab79-8fb660046134"
-version = "0.1.0"
-
 [[ColorTypes]]
 deps = ["FixedPointNumbers", "Random"]
 git-tree-sha1 = "4bffea7ed1a9f0f3d1a131bbcd4b925548d75288"
@@ -78,9 +72,15 @@ uuid = "53c48c17-4a7d-5ca2-90c5-79b7896eea93"
 version = "0.8.4"
 
 [[GPFields]]
-deps = ["FFTW", "HDF5", "Mmap", "Printf"]
+deps = ["FFTW", "HDF5", "LinearAlgebra", "Mmap", "Printf", "Reexport"]
 path = "GPFields"
 uuid = "1ff924b9-96ae-4c53-b8fa-3ca72644558a"
+version = "0.1.0"
+
+[[GPStatistics]]
+deps = ["FFTW", "GPFields", "HDF5", "TimerOutputs"]
+path = "GPStatistics"
+uuid = "f9745a5e-b5bf-4554-ab79-8fb660046134"
 version = "0.1.0"
 
 [[HDF5]]
