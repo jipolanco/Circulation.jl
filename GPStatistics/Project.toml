@@ -1,4 +1,4 @@
-name = "Circulation"
+name = "GPStatistics"
 uuid = "f9745a5e-b5bf-4554-ab79-8fb660046134"
 authors = ["Juan Ignacio Polanco <jipolanc@gmail.com>"]
 version = "0.1.0"

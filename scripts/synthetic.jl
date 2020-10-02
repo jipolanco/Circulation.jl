@@ -170,11 +170,11 @@ function save_binary(vs::Tuple, timestep=0;
 end
 
 function main()
-    N = 256
+    N = 128
     dims = (N, N, N)
     L = (2π, 2π, 2π)
-    # α = 5 // 3
-    α = 2
+    α = 5 // 3
+    # α = 2
     @time ks, vf = generate_synthetic_field_fourier(
         dims, α; L=L, incompressible=true)
     spec = spectrum(ks, vf)

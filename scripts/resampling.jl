@@ -59,12 +59,12 @@ function main(params)
     # Subset of resampled field corresponding to grid points of original field.
     slice_res = range.(1, size(ψ), step=Nres)
 
-    ρ_in = GPFields.compute_density(ψ_in)
-    ρ = GPFields.compute_density(ψ)
+    ρ_in = GPFields.density(ψ_in)
+    ρ = GPFields.density(ψ)
     @show vecdiff(ρ_in, ρ, slice_res)
 
-    p_in = GPFields.compute_momentum(ψ_in, gp_in)
-    p = GPFields.compute_momentum(ψ, gp_res)
+    p_in = GPFields.momentum(ψ_in, gp_in)
+    p = GPFields.momentum(ψ, gp_res)
     @show vecdiff(p_in, p, slice_res)
 
     vreg_in = map(p -> p ./ sqrt.(ρ_in), p_in)

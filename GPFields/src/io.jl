@@ -37,6 +37,7 @@ end
 # Read the full data
 function load_slice!(psi::ComplexArray{T}, vr::RealArray{T}, vi::RealArray{T},
                      slice::Nothing) where {T}
+    @show length(psi) length(vr) length(vi)
     @assert length(psi) == length(vr) == length(vi)
     @threads for n in eachindex(psi)
         @inbounds psi[n] = Complex{T}(vr[n], vi[n])
@@ -107,7 +108,7 @@ function load_psi!(psi::ComplexArray, gp::ParamsGP,
                    datadir::AbstractString, field_index::Integer;
                    kw...)
     ts = @sprintf "%03d" field_index  # e.g. "007" if field_index = 7
-    load_psi!(psi, gp, joinpath(datadir, "*Psi.$ts.dat"))
+    load_psi!(psi, gp, joinpath(datadir, "*Psi.$ts.dat"); kw...)
 end
 
 function load_psi!(psi::ComplexArray{T}, gp::ParamsGP{N},

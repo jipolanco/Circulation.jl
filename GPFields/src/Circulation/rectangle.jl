@@ -76,3 +76,12 @@ struct LoopIterator{
 end
 
 LoopIterator(x, args...) = LoopIterator(axes(x), args...)
+
+Base.size(l::LoopIterator) = length.(l.inds)
+
+@inline function Base.getindex(l::LoopIterator, i, j)
+    a, b = l.inds
+    @boundscheck checkbounds(a, i)
+    @boundscheck checkbounds(b, j)
+    @inbounds Rectangle((a[i], b[j]), l.rs)
+end

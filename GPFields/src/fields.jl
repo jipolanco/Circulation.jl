@@ -99,8 +99,3 @@ function density(ψ::ComplexArray{T}) where {T}
     ρ = similar(ψ, T)
     density!(ρ, ψ) :: RealArray
 end
-
-@deprecate compute_density density
-@deprecate compute_density! density!
-@deprecate compute_momentum momentum
-@deprecate compute_momentum! momentum!

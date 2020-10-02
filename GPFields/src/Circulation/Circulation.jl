@@ -1,11 +1,13 @@
 module Circulation
 
-export IntegralField2D, Rectangle, circulation
+export IntegralField2D, Rectangle
+export prepare!, circulation, circulation!
 
 using ..GPFields
 
 using Base.Threads
 using FFTW
+using LinearAlgebra: mul!
 
 include("rectangle.jl")
 include("integral_field.jl")
