@@ -2,7 +2,6 @@ module GPStatistics
 
 using FFTW
 using HDF5
-using LinearAlgebra: mul!
 using TimerOutputs
 using Base.Threads
 

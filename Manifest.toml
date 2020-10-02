@@ -72,13 +72,13 @@ uuid = "53c48c17-4a7d-5ca2-90c5-79b7896eea93"
 version = "0.8.4"
 
 [[GPFields]]
-deps = ["FFTW", "HDF5", "Mmap", "Printf", "Reexport"]
+deps = ["FFTW", "HDF5", "LinearAlgebra", "Mmap", "Printf", "Reexport"]
 path = "GPFields"
 uuid = "1ff924b9-96ae-4c53-b8fa-3ca72644558a"
 version = "0.1.0"
 
 [[GPStatistics]]
-deps = ["FFTW", "GPFields", "HDF5", "LinearAlgebra", "TimerOutputs"]
+deps = ["FFTW", "GPFields", "HDF5", "TimerOutputs"]
 path = "GPStatistics"
 uuid = "f9745a5e-b5bf-4554-ab79-8fb660046134"
 version = "0.1.0"
