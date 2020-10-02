@@ -5,3 +5,7 @@
 *.h5
 *.svg
 *.pdf
+
+/results
+/test_data
+/tests

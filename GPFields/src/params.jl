@@ -63,14 +63,26 @@ end
 
 get_coordinates(g::ParamsGP) = ntuple(d -> get_coordinates(g, d), Val(ndims(g)))
 
-function get_wavenumbers(g::ParamsGP, i::Integer)
+function get_wavenumbers(f::Function, g::ParamsGP, i::Integer)
     N = g.dims[i]
     L = g.L[i]
     sampling_freq = 2pi * N / L  # = 2π / Δx
-    fftfreq(N, sampling_freq)
+    f(N, sampling_freq)
 end
 
-get_wavenumbers(g::ParamsGP) = ntuple(d -> get_wavenumbers(g, d), Val(ndims(g)))
+# Wave numbers for complex-to-complex transform.
+get_wavenumbers(g::ParamsGP, ::Val{:c2c}) =
+    ntuple(d -> get_wavenumbers(fftfreq, g, d), Val(ndims(g)))
+
+# Wave numbers for real-to-complex transform.
+get_wavenumbers(g::ParamsGP, ::Val{:r2c}) =
+    (
+        get_wavenumbers(rfftfreq, g, 1),
+        ntuple(d -> get_wavenumbers(fftfreq, g, d + 1), Val(ndims(g) - 1))...,
+    )
+
+get_wavenumbers(g::ParamsGP, i::Integer) = get_wavenumbers(fftfreq, g, i)
+get_wavenumbers(g::ParamsGP) = get_wavenumbers(g, Val(:c2c))
 
 """
     write(g::Union{HDF5File,HDF5Group}, p::ParamsGP)
