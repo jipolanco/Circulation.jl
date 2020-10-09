@@ -15,23 +15,52 @@ end
 Base.size(p::ParamsGP) = p.dims
 Base.ndims(::ParamsGP{D}) where {D} = D
 
+function Base.show(io::IO, p::ParamsGP)
+    print(io,
+        """
+        Gross–Pitaevskii parameters
+          - Field resolution:  $(p.dims)
+          - Domain dimensions: $(p.L)
+          - c = $(p.c)
+          - ξ = $(p.ξ)
+          - κ = $(p.κ)""")
+end
+
 """
-    ParamsGP(dims::Dims{D}; L, c, nxi)
+    ParamsGP(dims::Dims{D}; L, c, nxi = nothing, ξ = nothing)
 
 Construct GP data parameters.
 
 The domain length should be given as a tuple of length `D`.
 For instance, for a cubic box of size `2π`, `L = (2pi, 2pi, 2pi)`.
+
+Either `nxi` or `ξ` must be given as a keyword argument.
 """
-function ParamsGP(dims::Dims{D}; L::NTuple{D}, c, nxi) where {D}
+function ParamsGP(dims::Dims{D};
+                  L::NTuple{D}, c,
+                  nxi = nothing,
+                  ξ = nothing,
+                 ) where {D}
     @assert D >= 1
 
     Lx = L[1]
     Nx = dims[1]
-    ξ = Lx * nxi / Nx
-    κ = Lx * sqrt(2) * c * ξ
 
-    ParamsGP{D}(dims, L, c, nxi, ξ, κ)
+    if ξ === nothing && nxi === nothing
+        throw(ArgumentError("either `ξ` or `nxi` must be given"))
+    elseif ξ !== nothing && nxi !== nothing
+        throw(ArgumentError("cannot pass both `ξ` and `nxi`"))
+    elseif nxi !== nothing
+        nxi_out = nxi
+        ξ_out = Lx * nxi / Nx
+    elseif ξ !== nothing
+        ξ_out = ξ
+        nxi_out = ξ_out * Nx / Lx
+    end
+
+    κ = Lx * sqrt(2) * c * ξ_out
+
+    ParamsGP{D}(dims, L, c, nxi_out, ξ_out, κ)
 end
 
 """
@@ -44,16 +73,17 @@ function ParamsGP(p::ParamsGP{D}, slice::Slice{D};
     idims = slice_dimensions(slice)
     Ns = getindex.(Ref(dims), idims)
     Ls = getindex.(Ref(L), idims)
-    ParamsGP(Ns; L=Ls, c=p.c, nxi=p.nξ)
+    ParamsGP(Ns; L=Ls, c=p.c, ξ=p.ξ)
 end
 
 """
-    ParamsGP(p::ParamsGP; dims=p.dims, L=p.L, c=p.c, nxi=p.nξ)
+    ParamsGP(p::ParamsGP; dims=p.dims, L=p.L)
 
 Copy `ParamsGP`, optionally modifying some parameters.
+
+Physical parameters such as `ξ` and `c` stay the same.
 """
-ParamsGP(p::ParamsGP; dims=p.dims, L=p.L, c=p.c, nxi=p.nξ) =
-    ParamsGP(dims, L=L, c=c, nxi=nxi)
+ParamsGP(p::ParamsGP; dims=p.dims, L=p.L) = ParamsGP(dims, L=L, c=p.c, ξ=p.ξ)
 
 function get_coordinates(g::ParamsGP, i::Integer)
     N = g.dims[i]

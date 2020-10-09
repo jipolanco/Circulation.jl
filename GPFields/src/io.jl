@@ -37,7 +37,6 @@ end
 # Read the full data
 function load_slice!(psi::ComplexArray{T}, vr::RealArray{T}, vi::RealArray{T},
                      slice::Nothing) where {T}
-    @show length(psi) length(vr) length(vi)
     @assert length(psi) == length(vr) == length(vi)
     @threads for n in eachindex(psi)
         @inbounds psi[n] = Complex{T}(vr[n], vi[n])
@@ -90,8 +89,8 @@ function load_slice!(vs::RealArray{T,N}, vin::RealArray{T,M},
 end
 
 """
-    load_psi!(psi, gp::ParamsGP, datadir, field_index; slice=nothing)
-    load_psi!(psi, gp::ParamsGP, filename_pat; slice=nothing)
+    load_psi!(psi, gp::ParamsGP, datadir, field_index; slice = nothing)
+    load_psi!(psi, gp::ParamsGP, filename_pat; kws...)
 
 Load complex ψ(x) field from files for `ψ_r` and `ψ_c`.
 
@@ -149,6 +148,28 @@ See also [`load_psi!`](@ref).
 function load_psi(gp::ParamsGP, args...; slice=nothing)
     psi = Array{ComplexF64}(undef, _loaded_dims(size(gp), slice))
     load_psi!(psi, gp, args...; slice=slice) :: ComplexArray
+end
+
+"""
+    load_psi_resampled(args...; resampling = 1)
+
+Convenience function for loading ψ field
+
+Non-keyword arguments are passed to [`load_psi`](@ref).
+"""
+function load_psi_resampled(params, args...; resampling = 1)
+    ψ_input = load_psi(params, args...)
+    if resampling == 1
+        return params, ψ_input
+    end
+    dims_in = size(ψ_input)
+    dims = resampling .* dims_in
+    gp = ParamsGP(params; dims = dims)
+    ψ = similar(ψ_input, dims)
+    fft!(ψ_input)
+    resample_field_fourier!(ψ, ψ_input, params)
+    ifft!(ψ)
+    gp, ψ
 end
 
 """

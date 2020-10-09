@@ -69,6 +69,20 @@ struct IntegralField2D{T, PlansFW, PlansBW}
         IntegralField2D(size(A)..., T; kwargs...)
 end
 
+"""
+    IntegralField2D(v; L)
+
+Initialise and set values of the integral fields from 2D vector field
+`v = (vx, vy)`.
+
+See also [`prepare!`](@ref).
+"""
+function IntegralField2D(v::NTuple{2,<:AbstractMatrix}; kwargs...)
+    I = IntegralField2D(v[1]; kwargs...)
+    prepare!(I, v)
+    I
+end
+
 Base.ndims(::IntegralField2D) = 2
 Base.size(I::IntegralField2D) = I.N
 Base.eltype(::Type{IntegralField2D{T}}) where {T} = T

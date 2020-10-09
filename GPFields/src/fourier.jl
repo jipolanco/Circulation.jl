@@ -14,7 +14,7 @@ function create_fft_plans_1d!(ψ::ComplexArray{T,D}) where {T,D}
 end
 
 """
-    curlF!(ωF, vF, gp::ParamsGP)
+    curlF!(ω̂, v̂, gp::ParamsGP)
 
 Compute curl of real vector field (such as momentum) in Fourier space.
 """

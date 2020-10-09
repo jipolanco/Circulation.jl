@@ -4,6 +4,8 @@ export ParamsGP
 export get_coordinates
 export
     load_psi,
+    load_psi!,
+    load_psi_resampled,
     density,
     momentum,
     density!,
