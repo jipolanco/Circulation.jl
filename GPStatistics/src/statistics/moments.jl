@@ -151,7 +151,7 @@ end
 
 function finalise!(s::Moments)
     @assert !was_finalised(s)
-    for r in s.Nr
+    for r = 1:s.Nr
         # Divide by number of samples, to get ⟨Γ^n⟩ and ⟨|Γ|^n⟩.
         Ns = s.Nsamples[r]
         s.Mabs[:, r] ./= Ns
