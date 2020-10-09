@@ -13,7 +13,8 @@ include("rectangle.jl")
 include("integral_field.jl")
 
 """
-    circulation!(Γ::AbstractMatrix, I::IntegralField2D, rs; grid_step=1)
+    circulation!(Γ::AbstractMatrix, I::IntegralField2D, rs;
+                 grid_step = 1, centre_cells = false)
 
 Compute circulation on a 2D slice around loops with a fixed rectangle shape.
 
@@ -31,15 +32,20 @@ Compute circulation on a 2D slice around loops with a fixed rectangle shape.
   considered in every direction. Note that the dimensions of `Γ` must be
   consistent with this parameter.
 
+- `centre_cells`: if `true`, then the element `Γ[i, j]` corresponds to
+  a loop centred at `(x[i], y[j])`, which may be nice for plotting. Otherwise, the
+  element `Γ[i, j]` is associated to the loop having its lower left corner
+  at `(x[i], y[j])`.
 """
 function circulation!(
         Γ::AbstractMatrix{<:Real}, I::IntegralField2D, rs::NTuple{2,Int};
         grid_step::Int = 1,
+        centre_cells = false,
     )
     if grid_step .* size(Γ) != size(I)
         throw(DimensionMismatch("incompatible size of output array"))
     end
-    loops = LoopIterator(I, rs, grid_step)
+    loops = LoopIterator(I, rs, grid_step; centre_cells = centre_cells)
     @threads for j ∈ axes(Γ, 2)
         for i ∈ axes(Γ, 1)
             @inbounds loop = loops[i, j]

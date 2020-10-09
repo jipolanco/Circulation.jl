@@ -58,12 +58,16 @@ struct LoopIterator{
     step :: Int      # step between grid points (if 1, iterate over all grid points)
     inds :: Inds
     function LoopIterator(inds_all::Tuple{Vararg{AbstractRange,2}},
-                          rs::Dims{2}, step = 1)
-        # Half radius (truncated if rs has odd numbers...).
-        # This is just to make sure that the element Γ[i, j] corresponds to the
-        # loop centred at (x[i], y[j]), which is nice for plotting.
-        rs_half = rs .>> 1
-        inds = map(inds_all, rs_half) do ax, offset
+                          rs::Dims{2}, step = 1; centre_cells = false)
+        rs_offset = if centre_cells
+            # Half radius (truncated if rs has odd numbers...).
+            # This is just to make sure that the element Γ[i, j] corresponds to the
+            # loop centred at (x[i], y[j]), which is nice for plotting.
+            rs .>> 1
+        else
+            (0, 0)
+        end :: Dims{2}
+        inds = map(inds_all, rs_offset) do ax, offset
             # This formula is to make sure that on refined grids (when step > 1),
             # the circulation is computed around exactly the same loops as the
             # original grid.
@@ -75,7 +79,7 @@ struct LoopIterator{
     end
 end
 
-LoopIterator(x, args...) = LoopIterator(axes(x), args...)
+LoopIterator(x, args...; kws...) = LoopIterator(axes(x), args...; kws...)
 
 Base.size(l::LoopIterator) = length.(l.inds)
 
