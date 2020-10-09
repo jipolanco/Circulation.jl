@@ -13,7 +13,7 @@ get_params() = (
     data_gp = "data/2048/tangle_2048_res4_turbulence.h5",
     # data_ns = "data_NS/NS1024/Nu1/t14000.h5",
     # data_ns = "data_NS/NS1024/Nu2/t15000.h5",
-    data_ns = "data_NS/NS512/Re1/t70000.h5",
+    data_ns = "data_NS/NS512/Re1/NS_512_forced_t70000.h5",
     NS_dir = "data_NS/NS512/Re1/latu_data",
     # NS_dir = expanduser("~/Work/simulation_data/LatuABC/Runs1024/Nu1/data/NS_r3_1024"),
     # Parameters of ABC flow
@@ -55,6 +55,7 @@ end
 function moment_from_histogram(H::AbstractMatrix, bin_centres, ::Val{p}) where {p}
     Nb, Nr = size(H)
     @assert length(bin_centres) == Nb
+    # @show sum(H, dims=1)
     M = zeros(Nr)
     @inbounds for i = 1:Nb
         x = bin_centres[i]
@@ -94,6 +95,20 @@ function load_dissipation_NS(dir, timestep)
     ε
 end
 
+function load_energy_NS(dir, timestep)
+    filename = joinpath(dir, "diagnostic", "energy.log")
+    ε = nothing
+    pat = Regex("^$timestep\\s+\\S+\\s+(\\S+)")
+    for line in eachline(filename)
+        m = match(pat, line)
+        if m !== nothing
+            E = parse(Float64, m[1])
+            break
+        end
+    end
+    E
+end
+
 function read_loop_sizes(g)
     ff = file(g)
     dx = load_dx(ff)
@@ -113,7 +128,10 @@ function plot_moment!(
         gg = g_open(g, "Moments")
         p_all = gg["p_abs"][:]::Vector{Int}
         n = searchsortedlast(p_all, p)
+        @assert p_all[n] == p
         M = gg["M_abs"][n, :]::Vector{Float64} # ./ (norm_Γ^p)
+        # FIXME input values are not normalised!
+        M ./= gg["total_samples"][n]
     end
     Nr = length(rs) - 2  # skip very large loops (periodicity problems)
     let r = rs[1:Nr], M = M[1:Nr]
@@ -122,6 +140,7 @@ function plot_moment!(
         @show filename(g), M[1] / A[1]^p
         M ./= norm_Γ^p
         A ./= norm_r^2
+        @show A[1] M[1]
         ax.plot(A, M; plot_kw...)
         # ax.plot(A, M .* A.^(-2/3); plot_kw...)
         # ax.plot(r[2:end], diff(log.(M)) ./ diff(log.(r)); plot_kw...)
@@ -143,7 +162,7 @@ function plot_moment!(ax, filename::AbstractString, h5field="Velocity"; etc...)
 end
 
 function parse_timestep_NS(data_file) :: Int
-    m = match(r"(\d+)\.h5$", data_file)
+    m = match(r"t(\d+)\.h5$", data_file)
     @assert m !== nothing
     parse(Int, m[1])
 end
@@ -153,16 +172,16 @@ function plot_moment_NS!(ax, params; etc...)
     dir = params.NS_dir
     step = parse_timestep_NS(data_file)
     ν = load_viscosity_NS(dir)
-    # ε = load_dissipation_NS(dir, step)
+    ε = load_dissipation_NS(dir, step)
+    E = load_energy_NS(dir, step)
+    Ω = ε / 2ν        # enstrophy
+    λ = sqrt(5E / Ω)  # Taylor scale
     # η = (ν^3 / ε)^(1/4)
-    L = params.L_ABC
-    ℓ = params.ℓ_gp
-    Γ_L = L * params.v_ABC
-    # @show Γ_L
-    # @show (ε * L^4)^(1/3)
+    L = λ
+    Γ_0 = L^2 * sqrt(2Ω / 3)
     plot_moment!(ax, data_file;
-                 norm_r = ℓ * 0.8,  # arbitrary...
-                 norm_Γ = 0.2,     # also arbitrary!
+                 norm_r = L,
+                 norm_Γ = Γ_0,
                  # norm_Γ = Γ_L,
                  etc...)
 end
@@ -185,6 +204,8 @@ function plot_moment(params; order::Val{p}, etc...) where {p}
     fig, ax = plt.subplots()
     ax.set_xscale(:log)
     ax.set_yscale(:log)
+    ax.set_yticks(10.0 .^ (-3:3))
+    ax.grid(true)
     ax.set_xlabel(L"A / ℓ^2")
     # ax.set_ylabel(L"\left< Γ^2 \right>^{1/2} / (σ_v L)")
     let p = replace(string(p), "//" => "/")
@@ -228,33 +249,49 @@ function plot_prob_zero_NS!(ax, params)
     data_file = params.data_ns
     dir = params.NS_dir
     ν = load_viscosity_NS(dir)
-    @show ν
     step = parse_timestep_NS(data_file)
     ε = load_dissipation_NS(dir, step)
+    E = load_energy_NS(dir, step)
+    Ω = ε / 2ν        # enstrophy
     η = (ν^3 / ε)^(1/4)
+    λ = sqrt(5E / Ω)  # Taylor scale
+    dx = 2π / 512
+    @show η / dx
+    @show λ / η
     rs, Γ, H = h5open(data_file, "r") do ff
         g = g_open(ff, "/Circulation/Velocity/Histogram")
         rs = read_loop_sizes(parent(g))
-        rs ./= η
         Γ, H = read_all_pdfs(g, bin_centres=false)  # return bin edges
         @assert length(Γ) == size(H, 1) + 1
         Γ ./= ν
+        rs ./= λ
         rs, Γ, H
     end
     # Assume bins are centred at 0 -> there is a [-a, a] bin
     n = searchsortedlast(Γ, 0)
     @assert Γ[n] < 0 < Γ[n + 1]
     @assert Γ[n] ≈ -Γ[n + 1]
-    Γ_max = round(Int, Γ[n + 1])
-    prob = vec(H[n, :])
+    @show Γ[n], Γ[n + 1]
+    Γ_max = Γ[n + 1]
+    Γ_max_round = round(Γ_max, digits=1)
+    prob = @views vec(H[n, :])
+    write_prob_zero_NS("prob_zero_NS.txt", rs, prob; Γ_max)
     ax.plot(rs, prob, "o-", color="tab:green",
-            label="Classical (\$|Γ| / ν < $Γ_max\$)")
+            label="Classical (\$|Γ| / ν < $Γ_max_round\$)")
     ax
+end
+
+function write_prob_zero_NS(filename, r, P; Γ_max)
+    open(filename, "w") do ff
+        write(ff, "#  (1) r/eta \t (2) Prob(|Gamma|/nu < $Γ_max)\n")
+        writedlm(ff, zip(r, P))
+    end
+    nothing
 end
 
 function plot_prob_zero(params)
     fig, ax = plt.subplots(figsize=(4, 3) .* 0.9)
-    ax.set_xlabel("\$r / ℓ\$, \$r / η\$")
+    ax.set_xlabel("\$r / ℓ\$, \$r / λ\$")
     ax.set_ylabel(L"\mathbb{P}(Γ_r = 0)")
     ax.set_xscale(:log)
     ax.set_yscale(:log)
@@ -282,7 +319,7 @@ function make_plots()
     params = get_params()
     let fig = plot_moment(params, order=Val(2))
         display(fig)
-        # fig.savefig("gamma_variance")
+        fig.savefig("gamma_variance")
     end
     let fig = plot_prob_zero(params)
         display(fig)

@@ -32,7 +32,7 @@ function main()
     loop_sizes = make_loop_sizes(base = 1.4, dims = dims)
 
     fields = (
-        data_dir = expanduser("~/Dropbox/circulation/data/tangle/256/fields"),
+        data_dir = expanduser("~/Work/data/Circulation/gGP/tangle/256/fields"),
         data_idx = 1,
         load_velocity = false,
     )
