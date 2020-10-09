@@ -17,6 +17,7 @@ range `0 < p ≤ 1`.
 For example, if `Nfrac = 10`, the exponents in `0.1:0.1:1` will be considered.
 """
 struct Moments{T, FracMatrix <: Union{Matrix{T},Nothing}} <: AbstractBaseStats
+    finalised :: Ref{Bool}
     Nr     :: Int  # number of "columns" of data (e.g. one per loop size)
     Nm     :: Int  # number of moments to compute (assumed to be even)
     Nm_odd :: Int  # number of odd moments to compute (= N / 2)
@@ -56,7 +57,7 @@ struct Moments{T, FracMatrix <: Union{Matrix{T},Nothing}} <: AbstractBaseStats
 
         FracMatrix = typeof(Mfrac)
 
-        new{T, FracMatrix}(Nr, N, Nodd, Nm_frac, Nsamples, Mabs, Modd, Mfrac)
+        new{T, FracMatrix}(false[], Nr, N, Nodd, Nm_frac, Nsamples, Mabs, Modd, Mfrac)
     end
 end
 
@@ -149,6 +150,7 @@ function reduce!(s::Moments, v)
 end
 
 function finalise!(s::Moments)
+    @assert !was_finalised(s)
     for r in s.Nr
         # Divide by number of samples, to get ⟨Γ^n⟩ and ⟨|Γ|^n⟩.
         Ns = s.Nsamples[r]
@@ -158,10 +160,12 @@ function finalise!(s::Moments)
             s.Mfrac[:, r] ./= Ns
         end
     end
+    s.finalised[] = true
     s
 end
 
 function reset!(s::Moments)
+    s.finalised[] = false
     fill!.((s.Nsamples, s.Mabs, s.Modd), 0)
     if has_fractional(s)
         fill!(s.Mfrac, 0)
@@ -170,6 +174,7 @@ function reset!(s::Moments)
 end
 
 function Base.write(g, s::Moments)
+    @assert was_finalised(s)
     g["total_samples"] = s.Nsamples
     g["M_odd"] = s.Modd
     g["M_abs"] = s.Mabs

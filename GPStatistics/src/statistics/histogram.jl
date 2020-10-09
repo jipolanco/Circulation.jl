@@ -4,6 +4,7 @@
 Histogram of a scalar quantity.
 """
 struct Histogram{T, Tb, BinType<:AbstractVector{Tb}} <: AbstractBaseStats
+    finalised :: Ref{Bool}
     Nr    :: Int          # number of "columns" of data (e.g. one per loop size)
     Nbins :: Int          # number of bins
     bin_edges :: BinType  # sorted list of bin edges [Nbins + 1]
@@ -25,7 +26,7 @@ struct Histogram{T, Tb, BinType<:AbstractVector{Tb}} <: AbstractBaseStats
         Tb = eltype(bin_edges)
         vmin = zeros(Tb, Nr)
         vmax = zeros(Tb, Nr)
-        new{T, Tb, BinType}(Nr, Nbins, bin_edges, H, vmin, vmax, Nsamples)
+        new{T, Tb, BinType}(false[], Nr, Nbins, bin_edges, H, vmin, vmax, Nsamples)
     end
 end
 
@@ -72,9 +73,14 @@ function reduce!(s::Histogram, v)
     s
 end
 
-finalise!(s::Histogram) = s  # nothing to do
+function finalise!(s::Histogram)
+    @assert !was_finalised(s)
+    s.finalised[] = true
+    s  # nothing to do
+end
 
 function reset!(s::Histogram)
+    s.finalised[] = false
     fill!(s.H, 0)
     fill!(s.Nsamples, 0)
     fill!(s.vmin, 0)
@@ -83,6 +89,7 @@ function reset!(s::Histogram)
 end
 
 function Base.write(g, s::Histogram)
+    @assert was_finalised(s)
     g["bin_edges"] = collect(s.bin_edges)
     g["total_samples"] = s.Nsamples
 

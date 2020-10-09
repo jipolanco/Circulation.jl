@@ -87,6 +87,8 @@ function reduce!(s::NTuple{N,S},
     s
 end
 
+was_finalised(stats::AbstractBaseStats) = stats.finalised[]
+
 """
     finalise!(stats::AbstractFlowStats)
 
