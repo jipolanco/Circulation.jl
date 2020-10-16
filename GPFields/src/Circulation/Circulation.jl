@@ -4,13 +4,68 @@ export IntegralField2D, Rectangle
 export prepare!, circulation, circulation!
 
 using ..GPFields
+import GPFields: ComplexVector
 
 using Base.Threads
 using FFTW
 using LinearAlgebra: mul!
+using SpecialFunctions: besselj1
 
 include("rectangle.jl")
 include("integral_field.jl")
+
+"""
+    circulation!(Γ::AbstractMatrix, vF::ComplexVector, r::Real)
+
+Compute circulation on a 2D slice from in-plane velocity field in Fourier space.
+
+Circulation is computed on circular regions of radius ``r``.
+
+Computation is performed by convoluting the vorticity field with a circle of
+radius ``r`` (a circular step function). In Fourier space, the circular kernel
+corresponds to ``J_1(rk) / (rk)``, the Bessel function of the first kind
+and first order, where ``k^2 = k_x^2 + k_y^2``.
+
+## Parameters
+
+- `Γ`: output real matrix containing the circulation associated to each point of
+  the physical grid.
+
+- `vF`: velocity field in Fourier space.
+
+- `r`: radius of circular loops.
+"""
+function circulation!(
+        Γ::AbstractMatrix{<:Real}, vF::ComplexVector{T,2} where T, r::Real;
+    )
+    # TODO
+    # - precompute Bessel function
+    # - don't assume wave numbers
+    # - avoid allocations: gF, plan
+    # - what are the units of `r`?
+    Nx, Ny = size(Γ)
+    ks = (rfftfreq(Nx, Nx), fftfreq(Ny, Ny))
+    if size(vF[1]) != length.(ks)
+        throw(DimensionMismatch("incompatible size of output array"))
+    end
+    scale = 1.0 / (Nx * Ny)
+    gF = similar(vF[1])
+    for I in CartesianIndices(gF)
+        kvec = getindex.(ks, Tuple(I))
+        if all(iszero.(kvec))
+            gF[I] = 0
+            continue
+        end
+        ω = im * (kvec[1] * vF[2][I] - kvec[2] * vF[1][I])
+        rk = r * sqrt(sum(abs2, kvec))
+        J = besselj1(2π * rk) / rk
+        # J = sinc(r * kvec[1]) * sinc(r * kvec[2])
+        gF[I] = J * ω * scale
+    end
+    plan = plan_brfft(gF, Nx, (1, 2))
+    mul!(Γ, plan, gF)
+    Γ
+end
 
 """
     circulation!(Γ::AbstractMatrix, I::IntegralField2D, rs;

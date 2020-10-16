@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.12.1
+# v0.12.4
 
 using Markdown
 using InteractiveUtils
@@ -144,7 +144,10 @@ plot_colourmap(make_transparent_cmap(plt.cm.RdBu))
 md"# Setup"
 
 # ╔═╡ 35ae4ae0-04b9-11eb-26c3-6b7a66da4acd
-resampling = 2
+resampling = 1
+
+# ╔═╡ 6531fd6e-0fab-11eb-063c-895e7d5ae867
+from_convolution = false  # true -> testing!!
 
 # ╔═╡ e260a816-06ec-11eb-3416-9f11f837c6cd
 resolution = Val(1024)  # 256, 1024 or 2048
@@ -154,7 +157,11 @@ get_value(::Val{N}) where {N} = N
 
 # ╔═╡ 184e0186-04c1-11eb-0d3a-892888819d53
 # Size of smallest circulation loop (= step of circulation grid)
-grid_step = resampling * get_value(resolution) >> 5
+grid_step = if from_convolution
+	1
+else
+	resampling * get_value(resolution) >> 5
+end
 
 # ╔═╡ 65ed010e-06e6-11eb-3975-ef0217acb6c0
 function compute_fields(gp, ψ)
@@ -168,7 +175,7 @@ end
 begin
 	
 function load_psi_tangle(::Val{256})
-	filename_fmt = expanduser("~/Dropbox/circulation/data/tangle/256/fields/*Psi.001.dat")
+	filename_fmt = expanduser("~/Work/Shared/data/gGP_samples/tangle/256/fields/*Psi.001.dat")
 	gp_in = ParamsGP((256, 256, 256); L = (2π, 2π, 2π), c = 1.0, nxi = 1.5)
 	slice = (:, :, 3)
 	gp = ParamsGP(gp_in, slice)
@@ -219,13 +226,23 @@ vint = IntegralField2D(fields.vs, L = gp.L);
 
 # ╔═╡ 304081f6-04c1-11eb-1533-a3699c44cdd2
 # Compute circulation on cells of circulation grid
-Γ = let r = grid_step
-	Ns = size(gp) .÷ grid_step
-	Γ = Array{Float64}(undef, Ns...)
-	circulation!(Γ, vint, (r, r); grid_step, centre_cells=false)
-	Γ ./= gp.κ
-	# circulation_filter!(Γ)
-	Γ
+Γ = if from_convolution
+	let r = 0.1
+		Ns = size(gp)
+		Γ = Array{Float64}(undef, Ns...)
+		vs = fields.vs
+		vF = rfft.(vs)
+		circulation!(Γ, vF, r)
+	end
+else
+	let r = grid_step
+		Ns = size(gp) .÷ grid_step
+		Γ = Array{Float64}(undef, Ns...)
+		circulation!(Γ, vint, (r, r); grid_step, centre_cells=false)
+		Γ ./= gp.κ
+		# circulation_filter!(Γ)
+		Γ
+	end
 end;
 
 # ╔═╡ 33ca1bc0-06dd-11eb-1bbc-0fca09e652dc
@@ -309,6 +326,10 @@ fig_slice = let
 		2,   # upper right
 	], 2, 2)
 	
+	if from_convolution
+		radii .*= 8
+	end
+	
 	Hs = Int.(size(Γ) ./ size(radii))
 	radii .= min.(radii, min(Hs...) >> 1)  # fixes low resolutions
 	
@@ -383,6 +404,7 @@ fig_slice.savefig("circulation_slice.svg")
 # ╟─04437242-04b8-11eb-0d5b-857b5dc34b5d
 # ╟─c4721330-04ba-11eb-0dc4-a7a6244c08bd
 # ╠═35ae4ae0-04b9-11eb-26c3-6b7a66da4acd
+# ╠═6531fd6e-0fab-11eb-063c-895e7d5ae867
 # ╠═e260a816-06ec-11eb-3416-9f11f837c6cd
 # ╟─afb6568e-0935-11eb-3b94-c10bedef706a
 # ╠═a67e27d4-06e6-11eb-1881-f9bdd88a7a07
