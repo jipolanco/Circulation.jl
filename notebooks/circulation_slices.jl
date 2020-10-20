@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.12.1
+# v0.12.4
 
 using Markdown
 using InteractiveUtils
@@ -12,6 +12,7 @@ begin
 	using GPFields
 	using FFTW
 	using LinearAlgebra
+	using SpecialFunctions
 end
 
 # ╔═╡ 9040b526-04c6-11eb-3b36-77a97c91ed7a
@@ -144,17 +145,24 @@ plot_colourmap(make_transparent_cmap(plt.cm.RdBu))
 md"# Setup"
 
 # ╔═╡ 35ae4ae0-04b9-11eb-26c3-6b7a66da4acd
-resampling = 2
+resampling = 4
+
+# ╔═╡ 6531fd6e-0fab-11eb-063c-895e7d5ae867
+from_convolution = true  # true -> testing!!
 
 # ╔═╡ e260a816-06ec-11eb-3416-9f11f837c6cd
-resolution = Val(1024)  # 256, 1024 or 2048
+resolution = Val(256)  # 256, 1024 or 2048
 
 # ╔═╡ afb6568e-0935-11eb-3b94-c10bedef706a
 get_value(::Val{N}) where {N} = N
 
 # ╔═╡ 184e0186-04c1-11eb-0d3a-892888819d53
 # Size of smallest circulation loop (= step of circulation grid)
-grid_step = resampling * get_value(resolution) >> 5
+grid_step = if from_convolution
+	1
+else
+	resampling * get_value(resolution) >> 5
+end
 
 # ╔═╡ 65ed010e-06e6-11eb-3975-ef0217acb6c0
 function compute_fields(gp, ψ)
@@ -168,7 +176,7 @@ end
 begin
 	
 function load_psi_tangle(::Val{256})
-	filename_fmt = expanduser("~/Dropbox/circulation/data/tangle/256/fields/*Psi.001.dat")
+	filename_fmt = expanduser("~/Work/Shared/data/gGP_samples/tangle/256/fields/*Psi.001.dat")
 	gp_in = ParamsGP((256, 256, 256); L = (2π, 2π, 2π), c = 1.0, nxi = 1.5)
 	slice = (:, :, 3)
 	gp = ParamsGP(gp_in, slice)
@@ -219,13 +227,23 @@ vint = IntegralField2D(fields.vs, L = gp.L);
 
 # ╔═╡ 304081f6-04c1-11eb-1533-a3699c44cdd2
 # Compute circulation on cells of circulation grid
-Γ = let r = grid_step
-	Ns = size(gp) .÷ grid_step
-	Γ = Array{Float64}(undef, Ns...)
-	circulation!(Γ, vint, (r, r); grid_step, centre_cells=false)
-	Γ ./= gp.κ
-	# circulation_filter!(Γ)
-	Γ
+Γ = if from_convolution
+	let r = 1
+		Ns = size(gp)
+		Γ = Array{Float64}(undef, Ns...)
+		vs = fields.vs
+		vF = rfft.(vs)
+		circulation!(Γ, vF, r)
+	end
+else
+	let r = grid_step
+		Ns = size(gp) .÷ grid_step
+		Γ = Array{Float64}(undef, Ns...)
+		circulation!(Γ, vint, (r, r); grid_step, centre_cells=false)
+		Γ ./= gp.κ
+		# circulation_filter!(Γ)
+		Γ
+	end
 end;
 
 # ╔═╡ 33ca1bc0-06dd-11eb-1bbc-0fca09e652dc
@@ -309,6 +327,10 @@ fig_slice = let
 		2,   # upper right
 	], 2, 2)
 	
+	if from_convolution
+		fill!(radii, 4 * resampling)
+	end
+	
 	Hs = Int.(size(Γ) ./ size(radii))
 	radii .= min.(radii, min(Hs...) >> 1)  # fixes low resolutions
 	
@@ -360,6 +382,72 @@ end
 # ╔═╡ 48963a30-06eb-11eb-30e3-d1a52d9a8f8a
 fig_slice.savefig("circulation_slice.svg")
 
+# ╔═╡ 45be1bfc-0fc7-11eb-1edd-7171b4959f76
+let r = pi / 8
+	fig, axes = plt.subplots(1, 2, figsize=(8, 4), dpi=120)
+	# ax.set_aspect(:equal)
+	N = 512
+	Lh = π
+	xs = range(0, 2Lh, length=(N + 1))[1:end-1]
+	ys = xs
+	g = zeros(N, N)
+	for j = 1:N, i = 1:N
+		x = xs[i]
+		y = ys[j]
+		# if (x - Lh)^2 + (y - Lh)^2 < r^2
+		if (x - Lh)^2 < r^2 && (y - Lh)^2 < r^2
+			g[i, j] = 1
+		end
+	end
+	let ax = axes[1]
+		ax.contourf(xs, ys, g')
+	end
+	kx = rfftfreq(N, N)
+	ky = fftfreq(N, N)
+	gF = rfft(g) ./ N
+	let ax = axes[2]
+		ax.plot(kx, gF[:, 1], "o-")
+		ks = range(2, 100, step=0.1)
+		rk = ks
+		J = -besselj1.(pi * rk) ./ rk * 110
+		# J = sinc.(rk) * 10
+		ax.plot(ks, J)
+		ax.set_xlim(-2, 20)
+	end
+	fig
+end
+
+# ╔═╡ 73e319fe-0fcb-11eb-320d-b77ff47a9bf8
+let r = pi / 8
+	fig, axes = plt.subplots(1, 2, figsize=(8, 4), dpi=120)
+	# ax.set_aspect(:equal)
+	N = 64
+	Lh = π
+	xs = range(0, 2Lh, length=(N + 1))[1:end-1]
+	g = zeros(N)
+	for i = 1:N
+		x = xs[i]
+		if (x - Lh)^2 < r^2
+			g[i] = 1
+		end
+	end
+	let ax = axes[1]
+		ax.plot(xs, g)
+	end
+	kx = rfftfreq(N, N)
+	gF = rfft(g) ./ sqrt(N)
+	let ax = axes[2]
+		ax.plot(kx, gF, "o-")
+		ks = range(1, 100, step=0.1)
+		rk = ks
+		# J = -besselj1.(rk) * 10
+		J = sinc.(rk) * 10
+		ax.plot(ks, J)
+		ax.set_xlim(-2, 20)
+	end
+	fig
+end
+
 # ╔═╡ Cell order:
 # ╟─93f9d4f2-04be-11eb-2bda-c35b6e65b22d
 # ╠═7a7efc84-04be-11eb-1b00-f783f2e7ac47
@@ -383,6 +471,7 @@ fig_slice.savefig("circulation_slice.svg")
 # ╟─04437242-04b8-11eb-0d5b-857b5dc34b5d
 # ╟─c4721330-04ba-11eb-0dc4-a7a6244c08bd
 # ╠═35ae4ae0-04b9-11eb-26c3-6b7a66da4acd
+# ╠═6531fd6e-0fab-11eb-063c-895e7d5ae867
 # ╠═e260a816-06ec-11eb-3416-9f11f837c6cd
 # ╟─afb6568e-0935-11eb-3b94-c10bedef706a
 # ╠═a67e27d4-06e6-11eb-1881-f9bdd88a7a07
@@ -398,3 +487,5 @@ fig_slice.savefig("circulation_slice.svg")
 # ╠═16106ec4-04b8-11eb-032e-072f8a2efdcc
 # ╠═9040b526-04c6-11eb-3b36-77a97c91ed7a
 # ╠═5e07c81e-04c2-11eb-2eaf-3d6136e0ed3e
+# ╠═45be1bfc-0fc7-11eb-1edd-7171b4959f76
+# ╠═73e319fe-0fcb-11eb-320d-b77ff47a9bf8

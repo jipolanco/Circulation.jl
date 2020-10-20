@@ -4,13 +4,68 @@ export IntegralField2D, Rectangle
 export prepare!, circulation, circulation!
 
 using ..GPFields
+import GPFields: ComplexVector
 
 using Base.Threads
 using FFTW
 using LinearAlgebra: mul!
+using Reexport
+
+include("Kernels.jl")
+@reexport using .Kernels
 
 include("rectangle.jl")
 include("integral_field.jl")
+
+"""
+    circulation!(
+        Γ::AbstractMatrix, vF::ComplexVector, kernel::AbstractKernel, gF::AbstractMatrix;
+        buf = similar(vF[1]), plan_inv = plan_irfft(buf, size(Γ, 1)),
+    )
+
+Compute circulation on a 2D slice from in-plane velocity field in Fourier space.
+
+Computation is performed by convoluting the vorticity field with a convolution kernel.
+The kernel matrix `gF` is typically constructed by a call to [`materialise`](@ref)
+with the `kernel`.
+
+## Parameters
+
+- `Γ`: output real matrix containing the circulation associated to each point of
+  the physical grid.
+
+- `vF`: velocity field in Fourier space.
+
+- `kernel`: 2D convolution kernel (e.g. [`RectangularKernel`](@ref) or
+  [`EllipsoidalKernel`](@ref)).
+
+- `gF`: kernel matrix in Fourier space. Typically obtained as `gF = materialise(kernel)`.
+
+"""
+function circulation!(
+        Γ::AbstractMatrix{<:Real}, vF::ComplexVector{T,2} where T,
+        kernel::Kernels.AbstractKernel, gF::AbstractMatrix;
+        buf = similar(vF[1]), plan_inv = plan_irfft(buf, size(Γ, 1)),
+    )
+    ks = Kernels.wavenumbers(kernel)
+    if size(vF[1]) != length.(ks)
+        throw(DimensionMismatch("kernel wave numbers incompatible with size of `vF` arrays"))
+    end
+    if size(vF[1]) != size(gF)
+        throw(DimensionMismatch("incompatible size of kernel array"))
+    end
+    if ((size(Γ, 1) >> 1) + 1, size(Γ, 2)) != size(gF)
+        throw(DimensionMismatch("incompatible size of output array"))
+    end
+    Γ_hat = buf
+    @inbounds for I in CartesianIndices(gF)
+        kvec = getindex.(ks, Tuple(I))
+        ω = im * (kvec[1] * vF[2][I] - kvec[2] * vF[1][I])
+        Γ_hat[I] = ω * gF[I]
+    end
+    mul!(Γ, plan_inv, Γ_hat)
+    Γ
+end
 
 """
     circulation!(Γ::AbstractMatrix, I::IntegralField2D, rs;
