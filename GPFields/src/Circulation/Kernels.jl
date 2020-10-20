@@ -6,11 +6,29 @@ Different kernels correspond to different loop shapes (e.g. rectangular, circula
 module Kernels
 
 export EllipsoidalKernel, RectangularKernel, DiscreteFourierKernel
-export materialise!
+export materialise!, lengthscales
 
 using SpecialFunctions: besselj1
 
+"""
+    AbstractKernel
+
+Abstract type for 2D convolution kernels.
+"""
 abstract type AbstractKernel end
+
+"""
+    lengthscales(kernel::AbstractKernel) -> NTuple
+
+Returns the characteristic length scales of a kernel.
+
+## Examples
+
+- for a [`RectangularKernel`](@ref), these are the two sides.
+
+- for an [`EllipsoidalKernel`](@ref), these are the two diameters (or axes).
+"""
+function lengthscales end
 
 """
     EllipsoidalKernel{T}
@@ -33,6 +51,8 @@ struct EllipsoidalKernel{T <: AbstractFloat} <: AbstractKernel
         new{float(T)}((Dx, Dy))
     end
 end
+
+lengthscales(kern::EllipsoidalKernel) = kern.diameters
 
 """
     EllipsoidalKernel(D)
@@ -62,6 +82,8 @@ struct RectangularKernel{T <: AbstractFloat} <: AbstractKernel
         new{float(T)}((Rx, Ry))
     end
 end
+
+lengthscales(kern::RectangularKernel) = kern.sides
 
 """
     RectangularKernel(R)
