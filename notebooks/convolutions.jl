@@ -169,8 +169,8 @@ let
 	end
 	let ax = axes[2, 1]
 		ax.set_aspect(:equal)
-		kernel = EllipsoidalKernel(r, ks)
-		wF = materialise(kernel)
+		kernel = EllipsoidalKernel(r)
+		wF = DiscreteFourierKernel(kernel, ks).mat
 		# wF = [
 		# 	# kernel_square_fourier(k..., r)
 		# 	kernel_circle_fourier(k..., (r, r); L = Ls)
@@ -243,11 +243,11 @@ end;
 	Ns = length.(xy)
 	Γhat = similar(vF[1])
 	plan_inv = plan_irfft(Γhat, Ns[1])
-	kernel = RectangularKernel(r, ks)
-	gF = materialise(kernel)
+	kernel = RectangularKernel(r)
+	gF = DiscreteFourierKernel(kernel, ks)
 	Γ = Matrix{Float64}(undef, Ns)
-	print("Using convolution...")
-	@time circulation!(Γ, vF, kernel, gF; buf = Γhat, plan_inv)
+	print("Using convolution...    ")
+	@time circulation!(Γ, vF, gF; buf = Γhat, plan_inv)
 	Γ ./= gp.κ
 end;
 

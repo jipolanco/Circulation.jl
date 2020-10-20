@@ -19,15 +19,14 @@ include("integral_field.jl")
 
 """
     circulation!(
-        Γ::AbstractMatrix, vF::ComplexVector, kernel::AbstractKernel, gF::AbstractMatrix;
+        Γ::AbstractMatrix, vF::ComplexVector, kernel::DiscreteFourierKernel;
         buf = similar(vF[1]), plan_inv = plan_irfft(buf, size(Γ, 1)),
     )
 
 Compute circulation on a 2D slice from in-plane velocity field in Fourier space.
 
-Computation is performed by convoluting the vorticity field with a convolution kernel.
-The kernel matrix `gF` is typically constructed by a call to [`materialise`](@ref)
-with the `kernel`.
+Computation is performed by convoluting the vorticity field with a discretised
+convolution kernel.
 
 ## Parameters
 
@@ -36,18 +35,16 @@ with the `kernel`.
 
 - `vF`: velocity field in Fourier space.
 
-- `kernel`: 2D convolution kernel (e.g. [`RectangularKernel`](@ref) or
-  [`EllipsoidalKernel`](@ref)).
-
-- `gF`: kernel matrix in Fourier space. Typically obtained as `gF = materialise(kernel)`.
+- `gF`: discretised kernel in Fourier space.
 
 """
 function circulation!(
         Γ::AbstractMatrix{<:Real}, vF::ComplexVector{T,2} where T,
-        kernel::Kernels.AbstractKernel, gF::AbstractMatrix;
+        kernel::DiscreteFourierKernel;
         buf = similar(vF[1]), plan_inv = plan_irfft(buf, size(Γ, 1)),
     )
     ks = Kernels.wavenumbers(kernel)
+    gF = Kernels.data(kernel)
     if size(vF[1]) != length.(ks)
         throw(DimensionMismatch("kernel wave numbers incompatible with size of `vF` arrays"))
     end

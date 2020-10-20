@@ -5,14 +5,12 @@ Different kernels correspond to different loop shapes (e.g. rectangular, circula
 """
 module Kernels
 
-export EllipsoidalKernel, RectangularKernel
-export materialise, materialise!
+export EllipsoidalKernel, RectangularKernel, DiscreteFourierKernel
+export materialise!
 
 using SpecialFunctions: besselj1
 
 abstract type AbstractKernel end
-
-wavenumbers(g::AbstractKernel) = g.ks
 
 """
     EllipsoidalKernel{T}
@@ -25,25 +23,23 @@ Note that the associated convolution kernel in Fourier space, constructed via
 
 ---
 
-    EllipsoidalKernel((Dx, Dy), (kx, ky))
+    EllipsoidalKernel(Dx, Dy)
 
-Construct ellipsoidal kernel with diameters `(Dx, Dy)` and Fourier wave
-numbers `(kx, ky)`.
+Construct ellipsoidal kernel with diameters `(Dx, Dy)`.
 """
-struct EllipsoidalKernel{T <: AbstractFloat, WaveNumbers} <: AbstractKernel
+struct EllipsoidalKernel{T <: AbstractFloat} <: AbstractKernel
     diameters :: NTuple{2,T}
-    ks :: NTuple{2,WaveNumbers}
-    function EllipsoidalKernel(Ds::NTuple{2,T}, ks) where {T}
-        new{float(T), typeof(first(ks))}(Ds, ks)
+    function EllipsoidalKernel(Dx::T, Dy::T) where {T}
+        new{float(T)}((Dx, Dy))
     end
 end
 
 """
-    EllipsoidalKernel(D, (kx, ky))
+    EllipsoidalKernel(D)
 
 Construct circular kernel with diameter `D`.
 """
-EllipsoidalKernel(D::Real, ks) = EllipsoidalKernel((D, D), ks)
+EllipsoidalKernel(D) = EllipsoidalKernel(D, D)
 
 """
     RectangularKernel{T}
@@ -56,53 +52,79 @@ Note that the associated convolution kernel in Fourier space, constructed via
 
 ---
 
-    RectangularKernel((Rx, Ry), (kx, ky))
+    RectangularKernel(Rx, Ry)
 
-Construct rectangular kernel with sides `(Rx, Ry)` and Fourier wave numbers
-`(kx, ky)`.
+Construct rectangular kernel with sides `(Rx, Ry)`.
 """
-struct RectangularKernel{T <: AbstractFloat, WaveNumbers} <: AbstractKernel
+struct RectangularKernel{T <: AbstractFloat} <: AbstractKernel
     sides :: NTuple{2,T}
-    ks :: NTuple{2,WaveNumbers}
-    function RectangularKernel(Rs::NTuple{2,T}, ks) where {T}
-        new{float(T), typeof(first(ks))}(Rs, ks)
+    function RectangularKernel(Rx::T, Ry::T) where {T}
+        new{float(T)}((Rx, Ry))
     end
 end
 
 """
-    RectangularKernel(R, (kx, ky))
+    RectangularKernel(R)
 
 Construct square kernel with side `R`.
 """
-RectangularKernel(R, ks) = RectangularKernel((R, R), ks)
+RectangularKernel(R) = RectangularKernel(R, R)
 
 """
-    materialise!(u::AbstractMatrix, kernel::AbstractKernel)
+    DiscreteFourierKernel{T, WaveNumbers}
 
-Fill kernel array in Fourier space.
+Represents a convolution kernel matrix materialised in Fourier space.
+
+---
+
+    DiscreteFourierKernel{T}(undef, kx, ky)
+
+Construct uninitialised kernel matrix in Fourier space, for the given wave
+numbers `(kx, ky)`.
+"""
+struct DiscreteFourierKernel{T, WaveNumbers}
+    mat :: Array{T,2}
+    ks  :: NTuple{2,WaveNumbers}
+    function DiscreteFourierKernel{T}(init, ks...) where {T}
+        Ns = length.(ks)
+        mat = Array{T}(init, Ns)
+        WaveNumbers = typeof(first(ks))
+        new{T,WaveNumbers}(mat, ks)
+    end
+end
+
+DiscreteFourierKernel{T}(init, ks) where {T} = DiscreteFourierKernel{T}(init, ks...)
+
+"""
+    DiscreteFourierKernel{T}(kernel::AbstractKernel, (kx, ky))
+    DiscreteFourierKernel(kernel::AbstractKernel, (kx, ky), [T = Float64])
+
+Construct and initialise discretised kernel in Fourier space, for the given wave numbers
+`(kx, ky)`.
+"""
+function DiscreteFourierKernel{T}(kernel::AbstractKernel, ks) where {T}
+    u = DiscreteFourierKernel{T}(undef, ks...)
+    materialise!(u, kernel)
+end
+
+DiscreteFourierKernel(kernel::AbstractKernel, ks, ::Type{T} = Float64) where {T} =
+    DiscreteFourierKernel{T}(kernel, ks)
+
+wavenumbers(u::DiscreteFourierKernel) = u.ks
+data(u::DiscreteFourierKernel) = u.mat
+
+"""
+    materialise!(u::DiscreteFourierKernel, kernel::AbstractKernel)
+
+Fill discretised kernel in Fourier space.
 
 See also [`materialise`](@ref).
 """
 function materialise! end
 
-"""
-    materialise(kernel::AbstractKernel, [T = Float64])
-
-Create new kernel array in Fourier space.
-
-See also [`materialise!`](@ref).
-"""
-function materialise(g::AbstractKernel, ::Type{T} = Float64) where {T}
-    Ns = length.(wavenumbers(g))
-    u = Array{T}(undef, Ns)
-    materialise!(u, g)
-end
-
-function materialise!(u::AbstractMatrix, g::RectangularKernel)
-    ks = wavenumbers(g)
-    if length.(ks) != size(u)
-        throw(DimensionMismatch("size of `u` inconsistent with number of wave numbers"))
-    end
+function materialise!(kf::DiscreteFourierKernel, g::RectangularKernel)
+    ks = wavenumbers(kf)
+    u = data(kf)
     Ls = 2π ./ getindex.(ks, 2)  # domain size: L = 2π / k[2]
     Rs = g.sides ./ Ls
     area = prod(g.sides)
@@ -110,14 +132,12 @@ function materialise!(u::AbstractMatrix, g::RectangularKernel)
         kvec = getindex.(ks, Tuple(I))
         u[I] = area * prod(sinc, kvec .* Rs)  # = A * sinc(kx * rx / Lx) * sinc(ky * ry / Ly)
     end
-    u
+    kf
 end
 
-function materialise!(u::AbstractMatrix, g::EllipsoidalKernel)
-    ks = wavenumbers(g)
-    if length.(ks) != size(u)
-        throw(DimensionMismatch("size of `u` inconsistent with number of wave numbers"))
-    end
+function materialise!(kf::DiscreteFourierKernel, g::EllipsoidalKernel)
+    ks = wavenumbers(kf)
+    u = data(kf)
     Ls = 2π ./ getindex.(ks, 2)  # domain size: L = 2π / k[2]
     Rs = g.diameters ./ Ls
     area = π * prod(g.diameters) / 4
@@ -126,7 +146,7 @@ function materialise!(u::AbstractMatrix, g::EllipsoidalKernel)
         kr = sqrt(sum(abs2, kvec .* Rs))  # = √[(kx * rx / Lx)^2 + (ky * ry / Ly)^2]
         u[I] = area * J1norm(kr)
     end
-    u
+    kf
 end
 
 """
