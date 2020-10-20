@@ -9,22 +9,25 @@ import GPFields: ComplexVector
 using Base.Threads
 using FFTW
 using LinearAlgebra: mul!
-using SpecialFunctions: besselj1
+using Reexport
+
+include("Kernels.jl")
+@reexport using .Kernels
 
 include("rectangle.jl")
 include("integral_field.jl")
 
 """
-    circulation!(Γ::AbstractMatrix, vF::ComplexVector, r::Real)
+    circulation!(
+        Γ::AbstractMatrix, vF::ComplexVector, kernel::AbstractKernel, gF::AbstractMatrix;
+        buf = similar(vF[1]), plan_inv = plan_irfft(buf, size(Γ, 1)),
+    )
 
 Compute circulation on a 2D slice from in-plane velocity field in Fourier space.
 
-Circulation is computed on circular regions of radius ``r``.
-
-Computation is performed by convoluting the vorticity field with a circle of
-radius ``r`` (a circular step function). In Fourier space, the circular kernel
-corresponds to ``J_1(rk) / (rk)``, the Bessel function of the first kind
-and first order, where ``k^2 = k_x^2 + k_y^2``.
+Computation is performed by convoluting the vorticity field with a convolution kernel.
+The kernel matrix `gF` is typically constructed by a call to [`materialise`](@ref)
+with the `kernel`.
 
 ## Parameters
 
@@ -33,37 +36,34 @@ and first order, where ``k^2 = k_x^2 + k_y^2``.
 
 - `vF`: velocity field in Fourier space.
 
-- `r`: radius of circular loops.
+- `kernel`: 2D convolution kernel (e.g. [`RectangularKernel`](@ref) or
+  [`EllipsoidalKernel`](@ref)).
+
+- `gF`: kernel matrix in Fourier space. Typically obtained as `gF = materialise(kernel)`.
+
 """
 function circulation!(
-        Γ::AbstractMatrix{<:Real}, vF::ComplexVector{T,2} where T, r::Real;
+        Γ::AbstractMatrix{<:Real}, vF::ComplexVector{T,2} where T,
+        kernel::Kernels.AbstractKernel, gF::AbstractMatrix;
+        buf = similar(vF[1]), plan_inv = plan_irfft(buf, size(Γ, 1)),
     )
-    # TODO
-    # - precompute Bessel function
-    # - don't assume wave numbers
-    # - avoid allocations: gF, plan
-    # - what are the units of `r`?
-    Nx, Ny = size(Γ)
-    ks = (rfftfreq(Nx, Nx), fftfreq(Ny, Ny))
+    ks = Kernels.wavenumbers(kernel)
     if size(vF[1]) != length.(ks)
+        throw(DimensionMismatch("kernel wave numbers incompatible with size of `vF` arrays"))
+    end
+    if size(vF[1]) != size(gF)
+        throw(DimensionMismatch("incompatible size of kernel array"))
+    end
+    if ((size(Γ, 1) >> 1) + 1, size(Γ, 2)) != size(gF)
         throw(DimensionMismatch("incompatible size of output array"))
     end
-    scale = 1.0 / (Nx * Ny)
-    gF = similar(vF[1])
-    for I in CartesianIndices(gF)
+    Γ_hat = buf
+    @inbounds for I in CartesianIndices(gF)
         kvec = getindex.(ks, Tuple(I))
-        if all(iszero.(kvec))
-            gF[I] = 0
-            continue
-        end
         ω = im * (kvec[1] * vF[2][I] - kvec[2] * vF[1][I])
-        rk = r * sqrt(sum(abs2, kvec))
-        J = besselj1(2π * rk) / rk
-        # J = sinc(r * kvec[1]) * sinc(r * kvec[2])
-        gF[I] = J * ω * scale
+        Γ_hat[I] = ω * gF[I]
     end
-    plan = plan_brfft(gF, Nx, (1, 2))
-    mul!(Γ, plan, gF)
+    mul!(Γ, plan_inv, Γ_hat)
     Γ
 end
 

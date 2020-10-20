@@ -28,10 +28,10 @@ uuid = "0b7ba130-8d10-5ba8-a3d6-c5182647fed9"
 version = "1.14.3+1"
 
 [[CompilerSupportLibraries_jll]]
-deps = ["Libdl", "Pkg"]
-git-tree-sha1 = "7c4f882c41faa72118841185afc58a2eb00ef612"
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
+git-tree-sha1 = "8e695f735fca77e9708e795eda62afdb869cbb70"
 uuid = "e66e0078-7015-5450-92f7-15fbd957f2ae"
-version = "0.3.3+0"
+version = "0.3.4+0"
 
 [[Dates]]
 deps = ["Printf"]
@@ -44,10 +44,10 @@ uuid = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
 version = "1.2.4"
 
 [[FFTW_jll]]
-deps = ["Libdl", "Pkg"]
-git-tree-sha1 = "6c975cd606128d45d1df432fb812d6eb10fee00b"
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
+git-tree-sha1 = "f10c3009373a2d5c4349b8a2932d8accb892892d"
 uuid = "f5851436-0d7a-5f13-b9de-f02708fd171a"
-version = "3.3.9+5"
+version = "3.3.9+6"
 
 [[HDF5]]
 deps = ["Blosc", "HDF5_jll", "Libdl", "Mmap", "Random"]
@@ -110,10 +110,10 @@ uuid = "d6f4376e-aef5-505a-96c1-9c027394607a"
 uuid = "a63ad114-7e13-5084-954f-fe012c677804"
 
 [[OpenSpecFun_jll]]
-deps = ["CompilerSupportLibraries_jll", "Libdl", "Pkg"]
-git-tree-sha1 = "d51c416559217d974a1113522d5919235ae67a87"
+deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl", "Pkg"]
+git-tree-sha1 = "9db77584158d0ab52307f8c04f8e7c08ca76b5b3"
 uuid = "efe28fd5-8261-553b-a9e1-b2916fc3738e"
-version = "0.5.3+3"
+version = "0.5.3+4"
 
 [[Pkg]]
 deps = ["Dates", "LibGit2", "Libdl", "Logging", "Markdown", "Printf", "REPL", "Random", "SHA", "UUIDs"]
@@ -161,12 +161,12 @@ uuid = "4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5"
 
 [[Zlib_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
-git-tree-sha1 = "ded43825988ace7a311ee7e1d0f09571822509c4"
+git-tree-sha1 = "320228915c8debb12cb434c59057290f0834dbf6"
 uuid = "83775a58-1f1d-513f-b197-d71354ab007a"
-version = "1.2.11+17"
+version = "1.2.11+18"
 
 [[Zstd_jll]]
-deps = ["Libdl", "Pkg"]
-git-tree-sha1 = "4de91f4313d9e88162d461e282fe3066ab3a3c09"
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
+git-tree-sha1 = "6f1abcb0c44f184690912aa4b0ba861dd64f11b9"
 uuid = "3161d3a3-bdf6-5164-811a-617609db77b4"
-version = "1.4.5+1"
+version = "1.4.5+2"
