@@ -5,6 +5,10 @@ end
 
 using .VelocityLikeFields
 
+abstract type AbstractSamplingMethod end
+struct ConvolutionMethod <: AbstractSamplingMethod end
+struct PhysicalMethod <: AbstractSamplingMethod end
+
 abstract type AbstractBaseStats end
 include("moments.jl")
 include("histogram.jl")
@@ -22,7 +26,7 @@ const StatsDict{S} =
 Broadcast.broadcastable(s::AbstractBaseStats) = Ref(s)
 
 Base.zero(s::S) where {S <: AbstractFlowStats} =
-    S(s.Nr, increments(s), s.resampling_factor, s.resampled_grid,
+    S(s.Nr, s.loop_sizes, s.resampling_factor, s.resampled_grid,
       zero(s.moments), zero(s.histogram))
 
 Base.zero(s::SD) where {SD <: StatsDict} = SD(k => zero(v) for (k, v) in s)
@@ -188,7 +192,7 @@ end
 """
     analyse!(stats::Dict, gp::ParamsGP, data_dir_base;
              data_idx = 1, eps_vel = 0,
-             max_slices = typemax(Int),
+             max_slices = nothing,
              load_velocity = false,
              to = TimerOutput())
 
@@ -236,10 +240,10 @@ end
 # Analyse for a single slice orientation.
 function analyse!(stats::StatsDict, orientation::Val, gp::ParamsGP{D},
                   data_params::ParamsDataFile;
-                  max_slices::Int = typemax(Int),
+                  max_slices = nothing,
                   load_velocity = false,
                   eps_vel = 0, to = TimerOutput()) where {D}
-    Nslices = min(num_slices(gp.dims, orientation), max_slices) :: Int
+    Nslices = num_slices(gp.dims, orientation, max_slices) :: Int
     @assert Nslices >= 1
     @assert !isempty(stats)
 
@@ -270,8 +274,9 @@ function analyse!(stats::StatsDict, orientation::Val, gp::ParamsGP{D},
 
     # Allocate arrays.
     fields = allocate_fields(
-        first(values(stats)), Nij_input, Nij_compute, with_v || with_vreg,
-        resampled_grid; L=Lij, load_velocity=load_velocity,
+        first(values(stats)), Nij_input, Nij_compute, with_v || with_vreg;
+        L = Lij, load_velocity = load_velocity,
+        compute_in_resampled_grid = resampled_grid,
     )
 
     Nth = nthreads()
@@ -300,8 +305,8 @@ function analyse!(stats::StatsDict, orientation::Val, gp::ParamsGP{D},
 end
 
 # Allocate fields common to all stats (circulation, velocity increments).
-function allocate_common_fields(Nij_input, Nij_resampled, with_v,
-                                compute_in_resampled_grid::Bool;
+function allocate_common_fields(Nij_input, Nij_resampled, with_v;
+                                compute_in_resampled_grid::Bool,
                                 load_velocity)
     FFTW.set_num_threads(nthreads())  # make sure that FFTs are threaded
     if load_velocity
@@ -451,6 +456,9 @@ slice_orientations(::ParamsGP{3}) = Val.((1, 2, 3))  # 3D data
 
 num_slices(::Dims{2}, ::Val{3}) = 1
 num_slices(dims::Dims{3}, ::Val{s}) where {s} = dims[s]
+
+num_slices(a, b, ::Nothing) = num_slices(a, b)
+num_slices(a, b, max_slices) = min(num_slices(a, b), max_slices)
 
 function make_slice(dims::Dims{2}, ::Val{3}, i)
     @assert i == 1

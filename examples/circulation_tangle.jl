@@ -27,12 +27,14 @@ end
 function main()
     dims = (256, 256, 256)
     gp = ParamsGP(dims, L = (2π, 2π, 2π), c = 1.0, nxi = 1.5)
-    resampling_factor = 1
+    resampling_factor = 2
+    with_convolution = false
     compute_in_resampled_grid = false
     loop_sizes = make_loop_sizes(base = 1.4, dims = dims)
+    kernels = with_convolution ? RectangularKernel.(loop_sizes .* gp.dx[1]) : loop_sizes
 
     fields = (
-        data_dir = expanduser("~/Work/data/Circulation/gGP/tangle/256/fields"),
+        data_dir = expanduser("~/Work/Shared/data/gGP_samples/tangle/256/fields"),
         data_idx = 1,
         load_velocity = false,
     )
@@ -89,7 +91,7 @@ function main()
 
         init_statistics(
             CirculationStats,
-            loop_sizes;
+            kernels;
             which = which,
             num_moments = par.moments_pmax,
             moments_Nfrac = par.moments_Nfrac,

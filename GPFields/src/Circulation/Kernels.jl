@@ -8,6 +8,7 @@ module Kernels
 export EllipsoidalKernel, RectangularKernel, DiscreteFourierKernel
 export materialise!, lengthscales
 
+using Base.Threads
 using SpecialFunctions: besselj1
 
 """
@@ -29,6 +30,13 @@ Returns the characteristic length scales of a kernel.
 - for an [`EllipsoidalKernel`](@ref), these are the two diameters (or axes).
 """
 function lengthscales end
+
+"""
+    area(kernel::AbstractKernel)
+
+Returns the physical area of a kernel.
+"""
+function area end
 
 """
     EllipsoidalKernel{T}
@@ -53,6 +61,7 @@ struct EllipsoidalKernel{T <: AbstractFloat} <: AbstractKernel
 end
 
 lengthscales(kern::EllipsoidalKernel) = kern.diameters
+area(kern::EllipsoidalKernel) = prod(kern.diameters) * π / 4
 
 """
     EllipsoidalKernel(D)
@@ -84,6 +93,7 @@ struct RectangularKernel{T <: AbstractFloat} <: AbstractKernel
 end
 
 lengthscales(kern::RectangularKernel) = kern.sides
+area(kern::RectangularKernel) = prod(kern.sides)
 
 """
     RectangularKernel(R)
@@ -149,10 +159,10 @@ function materialise!(kf::DiscreteFourierKernel, g::RectangularKernel)
     u = data(kf)
     Ls = 2π ./ getindex.(ks, 2)  # domain size: L = 2π / k[2]
     Rs = g.sides ./ Ls
-    area = prod(g.sides)
-    @inbounds for I in CartesianIndices(u)
+    A = area(g)
+    @inbounds @threads for I in CartesianIndices(u)
         kvec = getindex.(ks, Tuple(I))
-        u[I] = area * prod(sinc, kvec .* Rs)  # = A * sinc(kx * rx / Lx) * sinc(ky * ry / Ly)
+        u[I] = A * prod(sinc, kvec .* Rs)  # = A * sinc(kx * rx / Lx) * sinc(ky * ry / Ly)
     end
     kf
 end
@@ -162,11 +172,11 @@ function materialise!(kf::DiscreteFourierKernel, g::EllipsoidalKernel)
     u = data(kf)
     Ls = 2π ./ getindex.(ks, 2)  # domain size: L = 2π / k[2]
     Rs = g.diameters ./ Ls
-    area = π * prod(g.diameters) / 4
-    @inbounds for I in CartesianIndices(u)
+    A = area(g)
+    @inbounds @threads for I in CartesianIndices(u)
         kvec = getindex.(ks, Tuple(I))
         kr = sqrt(sum(abs2, kvec .* Rs))  # = √[(kx * rx / Lx)^2 + (ky * ry / Ly)^2]
-        u[I] = area * J1norm(kr)
+        u[I] = A * J1norm(kr)
     end
     kf
 end

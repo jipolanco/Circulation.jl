@@ -6,6 +6,7 @@ Parameters of D-dimensional GP data.
 struct ParamsGP{D}  # D: dimension
     dims :: NTuple{D,Int}      # (Nx, Ny, Nz)
     L    :: NTuple{D,Float64}  # (Lx, Ly, Lz)
+    dx   :: NTuple{D,Float64}  # (dx, dy, dz)
     c    :: Float64            # speed of sound
     nξ   :: Float64
     ξ    :: Float64            # healing length
@@ -58,9 +59,10 @@ function ParamsGP(dims::Dims{D};
         nxi_out = ξ_out * Nx / Lx
     end
 
+    dx = L ./ dims
     κ = Lx * sqrt(2) * c * ξ_out
 
-    ParamsGP{D}(dims, L, c, nxi_out, ξ_out, κ)
+    ParamsGP{D}(dims, L, dx, c, nxi_out, ξ_out, κ)
 end
 
 """
