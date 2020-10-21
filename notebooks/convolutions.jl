@@ -4,16 +4,6 @@
 using Markdown
 using InteractiveUtils
 
-# ╔═╡ 79fd1b1a-0fe3-11eb-1a2b-6573aa57ee46
-begin
-	ENV["MPLBACKEND"] = "Agg"
-	import PyPlot
-	using LaTeXStrings
-	const plt = PyPlot.plt
-	const mpl = plt.matplotlib
-	mpl.interactive(false)
-end;
-
 # ╔═╡ 42dd1e28-0fe3-11eb-2ec1-8dba1f719df6
 begin
 	using Pkg
@@ -24,7 +14,14 @@ begin
 	using LinearAlgebra
 	using SpecialFunctions
 	using BenchmarkTools
-end
+	
+	ENV["MPLBACKEND"] = "Agg"
+	import PyPlot
+	using LaTeXStrings
+	const plt = PyPlot.plt
+	const mpl = plt.matplotlib
+	mpl.interactive(false)
+end;
 
 # ╔═╡ 1ee3cc7a-0fe7-11eb-2a43-59039c95d09e
 md"# Kernels in 1D"
@@ -228,7 +225,7 @@ end
 
 # ╔═╡ 796b337c-0ff1-11eb-2ba9-97f399308235
 begin
-	ρ = density(ψ)
+	ρ = GPFields.density(ψ)
 	ps = momentum(ψ, gp)
 	vs = map(p -> p ./ ρ, ps)
 	plan2D = plan_rfft(vs[1])
@@ -243,8 +240,9 @@ end;
 	Ns = length.(xy)
 	Γhat = similar(vF[1])
 	plan_inv = plan_irfft(Γhat, Ns[1])
-	kernel = RectangularKernel(r)
-	gF = DiscreteFourierKernel(kernel, ks)
+	kernel = EllipsoidalKernel(r)
+	gF = DiscreteFourierKernel{Float64}(undef, ks...)
+	materialise!(gF, kernel)
 	Γ = Matrix{Float64}(undef, Ns)
 	print("Using convolution...    ")
 	@time circulation!(Γ, vF, gF; buf = Γhat, plan_inv)
@@ -298,7 +296,7 @@ extrema(ps[1])
 # ╔═╡ 3711a71a-0fe5-11eb-0698-0d3290290f00
 let
 	fig, ax = plt.subplots(dpi=100)
-	ax.imshow(ρ)
+	ax.imshow(ρ')
 	# ax.quiver(ps...)
 	fig
 end
@@ -330,5 +328,4 @@ end
 # ╠═03a544c0-103c-11eb-2e30-1d6e829715c1
 # ╠═3711a71a-0fe5-11eb-0698-0d3290290f00
 # ╠═796b337c-0ff1-11eb-2ba9-97f399308235
-# ╠═79fd1b1a-0fe3-11eb-1a2b-6573aa57ee46
 # ╠═42dd1e28-0fe3-11eb-2ec1-8dba1f719df6
