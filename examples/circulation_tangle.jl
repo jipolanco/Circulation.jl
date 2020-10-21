@@ -28,9 +28,9 @@ function main()
     dims = (256, 256, 256)
     gp = ParamsGP(dims, L = (2π, 2π, 2π), c = 1.0, nxi = 1.5)
     resampling_factor = 2
-    with_convolution = false
+    with_convolution = true
     compute_in_resampled_grid = false
-    loop_sizes = make_loop_sizes(base = 1.4, dims = dims)
+    loop_sizes = make_loop_sizes(; base = 1.4, dims = dims)
     kernels = with_convolution ? RectangularKernel.(loop_sizes .* gp.dx[1]) : loop_sizes
 
     fields = (
@@ -53,6 +53,7 @@ function main()
         hist_max_kappa = 30.5,
     )
 
+    @info "Using convolutions: $with_convolution"
     @info "Loop sizes: $loop_sizes ($(length(loop_sizes)) sizes)"
     @info "Resampling factor: $resampling_factor"
     if resampling_factor > 1
