@@ -34,7 +34,7 @@ function generate_synthetic_field_fourier(
     # Dimensions in Fourier space
     dims_f = length.(ks)
     vf = ntuple(d -> zeros(ComplexF64, dims_f...), length(dims))  # vector field
-    pow = -(2 + α) / 4
+    pow = -(N - 1 + α) / 4
 
     k2max = ks[1][end]^2
 
@@ -170,7 +170,7 @@ function save_binary(vs::Tuple, timestep=0;
 end
 
 function main()
-    N = 128
+    N = 64
     dims = (N, N, N)
     L = (2π, 2π, 2π)
     α = 5 // 3
