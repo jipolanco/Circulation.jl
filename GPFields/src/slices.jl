@@ -1,3 +1,6 @@
+# Defines a slice in N dimensions.
+const Slice{N} = Tuple{Vararg{Union{Int,Colon}, N}} where {N}
+
 """
     slice_dimensions(slice::Slice)
 

@@ -2,6 +2,17 @@
     ParamsGP{D}
 
 Parameters of D-dimensional GP data.
+
+---
+
+    ParamsGP(dims::Dims{D}; L, c, nxi = nothing, ξ = nothing)
+
+Construct GP data parameters.
+
+The domain length should be given as a tuple of length `D`.
+For instance, for a cubic box of size `2π`, `L = (2pi, 2pi, 2pi)`.
+
+Either `nxi` or `ξ` must be given as a keyword argument.
 """
 struct ParamsGP{D}  # D: dimension
     dims :: NTuple{D,Int}      # (Nx, Ny, Nz)
@@ -11,6 +22,32 @@ struct ParamsGP{D}  # D: dimension
     nξ   :: Float64
     ξ    :: Float64            # healing length
     κ    :: Float64            # quantum of circulation
+
+    function ParamsGP(
+            dims::Dims{D}; L::NTuple{D}, c, nxi = nothing, ξ = nothing,
+        ) where {D}
+        @assert D >= 1
+
+        Lx = L[1]
+        Nx = dims[1]
+
+        if ξ === nothing && nxi === nothing
+            throw(ArgumentError("either `ξ` or `nxi` must be given"))
+        elseif ξ !== nothing && nxi !== nothing
+            throw(ArgumentError("cannot pass both `ξ` and `nxi`"))
+        elseif nxi !== nothing
+            nxi_out = nxi
+            ξ_out = Lx * nxi / Nx
+        elseif ξ !== nothing
+            ξ_out = ξ
+            nxi_out = ξ_out * Nx / Lx
+        end
+
+        dx = L ./ dims
+        κ = Lx * sqrt(2) * c * ξ_out
+
+        new{D}(dims, L, dx, c, nxi_out, ξ_out, κ)
+    end
 end
 
 Base.size(p::ParamsGP) = p.dims
@@ -25,44 +62,6 @@ function Base.show(io::IO, p::ParamsGP)
           - c = $(p.c)
           - ξ = $(p.ξ)
           - κ = $(p.κ)""")
-end
-
-"""
-    ParamsGP(dims::Dims{D}; L, c, nxi = nothing, ξ = nothing)
-
-Construct GP data parameters.
-
-The domain length should be given as a tuple of length `D`.
-For instance, for a cubic box of size `2π`, `L = (2pi, 2pi, 2pi)`.
-
-Either `nxi` or `ξ` must be given as a keyword argument.
-"""
-function ParamsGP(dims::Dims{D};
-                  L::NTuple{D}, c,
-                  nxi = nothing,
-                  ξ = nothing,
-                 ) where {D}
-    @assert D >= 1
-
-    Lx = L[1]
-    Nx = dims[1]
-
-    if ξ === nothing && nxi === nothing
-        throw(ArgumentError("either `ξ` or `nxi` must be given"))
-    elseif ξ !== nothing && nxi !== nothing
-        throw(ArgumentError("cannot pass both `ξ` and `nxi`"))
-    elseif nxi !== nothing
-        nxi_out = nxi
-        ξ_out = Lx * nxi / Nx
-    elseif ξ !== nothing
-        ξ_out = ξ
-        nxi_out = ξ_out * Nx / Lx
-    end
-
-    dx = L ./ dims
-    κ = Lx * sqrt(2) * c * ξ_out
-
-    ParamsGP{D}(dims, L, dx, c, nxi_out, ξ_out, κ)
 end
 
 """

@@ -102,6 +102,10 @@ such as `(:, 42, :)`.
 In the second variant, a filename pattern should be passed.
 The pattern must contain a `*` placeholder that will be replaced by "Rea" and
 "Ima", for the real and imaginary parts of ψ.
+
+Returns the parameters of the loaded field, as a [`ParamsGP`](@ref). In
+particular, if a slice of a 3D field is loaded, then the parameters are those of
+the resulting 2D field.
 """
 function load_psi!(psi::ComplexArray, gp::ParamsGP,
                    datadir::AbstractString, field_index::Integer;
@@ -132,33 +136,39 @@ function load_psi!(psi::ComplexArray{T}, gp::ParamsGP{N},
 
     load_slice!(psi, vr, vi, slice)
 
-    psi
+    # Parameters of the slice
+    gp_slice = slice === nothing ? gp : ParamsGP(gp, slice)
+
+    gp_slice
 end
 
 """
-    load_psi(gp::ParamsGP, datadir, field_index; slice=nothing)
-    load_psi(gp::ParamsGP, filename_pat; slice=nothing)
+    load_psi(gp::ParamsGP, datadir, field_index; slice = nothing, resampling = nothing)
+    load_psi(gp::ParamsGP, filename_pat; kws...)
 
 Load complex ψ(x) field from files for `ψ_r` and `ψ_c`.
 
-Allocates output `psi`.
+Allocates and returns loaded `ψ` field.
+
+The field may be optionally resampled into a higher resolution grid, by
+zero-padding in Fourier space.
+This is done via the `resampling` argument, which should be a resampling factor
+larger than 1.
+If this option is passed, a tuple `(gp_out, ψ_out)` is returned, where `gp_out`
+is a [`ParamsGP`](@ref) containing the parameters of the resampled field.
 
 See also [`load_psi!`](@ref).
 """
-function load_psi(gp::ParamsGP, args...; slice=nothing)
-    psi = Array{ComplexF64}(undef, _loaded_dims(size(gp), slice))
-    load_psi!(psi, gp, args...; slice=slice) :: ComplexArray
+function load_psi(gp::ParamsGP, args...; slice = nothing, resampling = nothing)
+    ψ = Array{ComplexF64}(undef, _loaded_dims(size(gp), slice))
+    gp_slice = load_psi!(ψ, gp, args...; slice=slice)
+    resample_psi(gp_slice, ψ, resampling)
 end
 
-"""
-    load_psi_resampled(args...; resampling = 1)
+# Note that `params` is not returned for backwards compatibility.
+resample_psi(params, ψ, ::Nothing) = ψ
 
-Convenience function for loading ψ field
-
-Non-keyword arguments are passed to [`load_psi`](@ref).
-"""
-function load_psi_resampled(params, args...; resampling = 1)
-    ψ_input = load_psi(params, args...)
+function resample_psi(params, ψ_input, resampling::Integer)
     if resampling == 1
         return params, ψ_input
     end
