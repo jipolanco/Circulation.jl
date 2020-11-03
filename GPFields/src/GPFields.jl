@@ -1,8 +1,8 @@
 module GPFields
 
 export ParamsGP
-export get_coordinates
 export
+    coordinates,
     load_psi,
     load_psi!,
     density,

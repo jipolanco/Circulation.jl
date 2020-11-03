@@ -86,13 +86,22 @@ Physical parameters such as `ξ` and `c` stay the same.
 """
 ParamsGP(p::ParamsGP; dims=p.dims, L=p.L) = ParamsGP(dims, L=L, c=p.c, ξ=p.ξ)
 
-function get_coordinates(g::ParamsGP, i::Integer)
+"""
+    coordinates(p::ParamsGP, [dim])
+
+Get physical coordinates `(x, y, ...)` of domain.
+
+Note that the endpoint of the periodic domain is also included.
+"""
+function coordinates(g::ParamsGP, i::Integer)
     N = g.dims[i]
     L = g.L[i]
-    LinRange(0, L, N + 1)[1:N]
+    range(0, L, length = N + 1)
 end
 
-get_coordinates(g::ParamsGP) = ntuple(d -> get_coordinates(g, d), Val(ndims(g)))
+coordinates(g::ParamsGP) = ntuple(d -> coordinates(g, d), Val(ndims(g)))
+
+@deprecate get_coordinates coordinates
 
 function get_wavenumbers(f::Function, g::ParamsGP, i::Integer)
     N = g.dims[i]
