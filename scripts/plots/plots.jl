@@ -13,8 +13,13 @@ get_params() = (
     data_gp = "data/2048/tangle_2048_res4_turbulence.h5",
     # data_ns = "data_NS/NS1024/Nu1/t14000.h5",
     # data_ns = "data_NS/NS1024/Nu2/t15000.h5",
-    data_ns = "data_NS/NS512/Re1/NS_512_forced_t70000.h5",
-    NS_dir = "data_NS/NS512/Re1/latu_data",
+
+    # data_ns = "data_NS/NS512/Re1/NS_512_forced_t70000.h5",
+    # NS_dir = "data_NS/NS512/Re1/latu_data",
+
+    data_ns = "data_NS/NS1024_2013/R0_GradientForcing/NS_1024_t74000.h5",
+    NS_dir = "data_NS/NS1024_2013/R0_GradientForcing/latu_data",
+
     # NS_dir = expanduser("~/Work/simulation_data/LatuABC/Runs1024/Nu1/data/NS_r3_1024"),
     # Parameters of ABC flow
     L_ABC = π,
@@ -97,7 +102,7 @@ end
 
 function load_energy_NS(dir, timestep)
     filename = joinpath(dir, "diagnostic", "energy.log")
-    ε = nothing
+    E = nothing
     pat = Regex("^$timestep\\s+\\S+\\s+(\\S+)")
     for line in eachline(filename)
         m = match(pat, line)
@@ -205,7 +210,7 @@ function plot_moment(params; order::Val{p}, etc...) where {p}
     ax.set_xscale(:log)
     ax.set_yscale(:log)
     ax.set_yticks(10.0 .^ (-3:3))
-    ax.grid(true)
+    # ax.grid(true)
     ax.set_xlabel(L"A / ℓ^2")
     # ax.set_ylabel(L"\left< Γ^2 \right>^{1/2} / (σ_v L)")
     let p = replace(string(p), "//" => "/")
@@ -253,9 +258,10 @@ function plot_prob_zero_NS!(ax, params)
     ε = load_dissipation_NS(dir, step)
     E = load_energy_NS(dir, step)
     Ω = ε / 2ν        # enstrophy
+    @show E Ω ν
     η = (ν^3 / ε)^(1/4)
     λ = sqrt(5E / Ω)  # Taylor scale
-    dx = 2π / 512
+    dx = 2π / 1024
     @show η / dx
     @show λ / η
     rs, Γ, H = h5open(data_file, "r") do ff
@@ -272,9 +278,12 @@ function plot_prob_zero_NS!(ax, params)
     @assert Γ[n] < 0 < Γ[n + 1]
     @assert Γ[n] ≈ -Γ[n + 1]
     @show Γ[n], Γ[n + 1]
-    Γ_max = Γ[n + 1]
+    dn = 0
+    ind = (n - dn):(n + dn)
+    @assert Γ[first(ind)] ≈ -Γ[last(ind) + 1]
+    Γ_max = Γ[last(ind) + 1]
     Γ_max_round = round(Γ_max, digits=1)
-    prob = @views vec(H[n, :])
+    prob = @views vec(sum(H[ind, :], dims=1))
     write_prob_zero_NS("prob_zero_NS.txt", rs, prob; Γ_max)
     ax.plot(rs, prob, "o-", color="tab:green",
             label="Classical (\$|Γ| / ν < $Γ_max_round\$)")
