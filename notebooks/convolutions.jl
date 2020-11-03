@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.12.4
+# v0.12.5
 
 using Markdown
 using InteractiveUtils
@@ -192,36 +192,20 @@ let
 end
 
 # ╔═╡ 182f1376-0ff6-11eb-350e-a7265f281d7b
-resampling = 4
+resampling = 2
 
 # ╔═╡ dcf5911a-1043-11eb-0a2e-8778d99f43fb
-loop_size = π / 4
+loop_size = π / 16
 
 # ╔═╡ 53b315bc-0fe4-11eb-30dc-a3785444134f
-ψ_in, gp_in = let slice = (:, :, 4)
+gp, ψ = let
+	slice = (:, :, 4)
 	N = 256
-	filenames = expanduser("~/Work/Shared/data/gGP_samples/tangle/256/fields/*Psi.001.dat")
+	workdir = gethostname() == "thinkpad" ? "~/Work" : "~/Work/Shared"
+	filenames = expanduser("$workdir/data/gGP_samples/tangle/256/fields/*Psi.001.dat")
 	gp_input = ParamsGP((N, N, N); L = (2pi, 2pi, 2pi), c = 1, nxi = 1.5)
-	ψ = load_psi(gp_input, filenames; slice)
-	gp = ParamsGP(gp_input, slice)
-	ψ, gp
+	load_psi(gp_input, filenames; slice, resampling)
 end;
-
-# ╔═╡ 2a81a4d4-0ff2-11eb-2b97-21f0822618c2
-function resample_psi(ψ_in, gp_in; resampling)
-	if resampling == 1
-		return ψ_in, gp_in
-	end
-	dims = resampling .* size(ψ_in)
-	ψ = similar(ψ_in, resampling .* size(ψ_in))
-	resample_field_fourier!(ψ, fft(ψ_in), gp_in)
-	ifft!(ψ)
-	gp = ParamsGP(gp_in; dims = dims)
-	ψ, gp
-end
-
-# ╔═╡ dbcc43f0-0fe5-11eb-2eb0-9be38e54907e
-ψ, gp = resample_psi(ψ_in, gp_in, resampling = resampling);
 
 # ╔═╡ 796b337c-0ff1-11eb-2ba9-97f399308235
 begin
@@ -230,17 +214,18 @@ begin
 	vs = map(p -> p ./ ρ, ps)
 	plan2D = plan_rfft(vs[1])
 	vF = Ref(plan2D) .* vs
-	xy = get_coordinates(gp)
+	xy = coordinates(gp)
+	xy_in = map(x -> x[1:end-1], xy)
 	ks = GPFields.get_wavenumbers(gp, Val(:r2c))
 end;
 
 # ╔═╡ 3233339a-0ff3-11eb-098c-51070a1c30d1
 Γ = let
 	r = loop_size
-	Ns = length.(xy)
+	Ns = length.(xy) .- 1
 	Γhat = similar(vF[1])
 	plan_inv = plan_irfft(Γhat, Ns[1])
-	kernel = EllipsoidalKernel(r)
+	kernel = RectangularKernel(r)
 	gF = DiscreteFourierKernel{Float64}(undef, ks...)
 	materialise!(gF, kernel)
 	Γ = Matrix{Float64}(undef, Ns)
@@ -251,20 +236,27 @@ end;
 
 # ╔═╡ 3cf9e6d0-0ff5-11eb-23c0-4d20ff2e03b9
 let
-	fig, ax = plt.subplots(dpi=120)
+	fig, ax = plt.subplots()
 	ax.set_aspect(:equal)
 	vmax = 4
 	cf = ax.pcolormesh(xy..., Γ'; vmax, vmin=-vmax,
-		cmap=plt.cm.RdBu, shading=:auto)
+		cmap=plt.cm.RdBu, shading=:flat)
 	fig.colorbar(cf; ax, label=L"Γ / κ")
-	ax.contour(xy..., ρ', levels=[0.1, ])
+	xgrid = range(0, 2π, step=loop_size)[1:end-1]
+	ax.contour(xy_in..., ρ', levels=[0.1, ])
 	ax.set_title("r = $(loop_size / π) π")
+	let kws = (lw = 0.5, c = "0.6")
+		ax.axhline.(xgrid; kws...)
+		ax.axvline.(xgrid; kws...)
+	end
+	# ax.set_xlim(3, 4)
+	# ax.set_ylim(2pi - 0.4, 2pi)
 	fig
 end
 
 # ╔═╡ 90dd9228-1043-11eb-3ec4-4f98237703e2
 Γ_orig = let
-	grid_step = resampling
+	grid_step = 1
 	rs = round.(Int, loop_size .* size(gp) ./ (2π))
 	vint = IntegralField2D(vs[1]; L = gp.L)
 	Γ = similar(vs[1], size(vs[1]) .÷ grid_step)
@@ -278,7 +270,7 @@ end;
 
 # ╔═╡ d35e2c60-0ff4-11eb-08c5-1f045d375c4f
 let
-	fig, ax = plt.subplots(dpi=120)
+	fig, ax = plt.subplots()
 	ax.set_yscale(:log)
 	M = 4.2
 	bins = range(-M, M, length=400)
@@ -323,8 +315,6 @@ end
 # ╠═182f1376-0ff6-11eb-350e-a7265f281d7b
 # ╠═dcf5911a-1043-11eb-0a2e-8778d99f43fb
 # ╠═53b315bc-0fe4-11eb-30dc-a3785444134f
-# ╠═2a81a4d4-0ff2-11eb-2b97-21f0822618c2
-# ╠═dbcc43f0-0fe5-11eb-2eb0-9be38e54907e
 # ╠═03a544c0-103c-11eb-2e30-1d6e829715c1
 # ╠═3711a71a-0fe5-11eb-0698-0d3290290f00
 # ╠═796b337c-0ff1-11eb-2ba9-97f399308235

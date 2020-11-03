@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.12.4
+# v0.12.5
 
 using Markdown
 using InteractiveUtils
@@ -24,13 +24,6 @@ begin
 	const mpl = plt.matplotlib
 	plt.ion()
 end;
-
-# ╔═╡ 5e07c81e-04c2-11eb-2eaf-3d6136e0ed3e
-begin
-	ENV["GRDISPLAY"] = "pluto"
-	using GR
-	GR.js.init_pluto()
-end
 
 # ╔═╡ 93f9d4f2-04be-11eb-2bda-c35b6e65b22d
 md"# Circulation"
@@ -145,7 +138,7 @@ plot_colourmap(make_transparent_cmap(plt.cm.RdBu))
 md"# Setup"
 
 # ╔═╡ 35ae4ae0-04b9-11eb-26c3-6b7a66da4acd
-resampling = 4
+resampling = 1
 
 # ╔═╡ 6531fd6e-0fab-11eb-063c-895e7d5ae867
 from_convolution = true  # true -> testing!!
@@ -175,46 +168,31 @@ end
 # ╔═╡ 9a742c84-04c5-11eb-1123-093a9f87394e
 begin
 	
-function load_psi_tangle(::Val{256})
-	filename_fmt = expanduser("~/Work/Shared/data/gGP_samples/tangle/256/fields/*Psi.001.dat")
+function load_psi_tangle(::Val{256}, resampling)
+	workdir = gethostname() == "thinkpad" ? "~/Work" : "~/Work/Shared"
+	filenames = expanduser("$workdir/data/gGP_samples/tangle/256/fields/*Psi.001.dat")
 	gp_in = ParamsGP((256, 256, 256); L = (2π, 2π, 2π), c = 1.0, nxi = 1.5)
 	slice = (:, :, 3)
 	gp = ParamsGP(gp_in, slice)
-	gp, load_psi(gp_in, filename_fmt; slice)
+	load_psi(gp_in, filenames; slice, resampling)
 end
 
-function load_psi_tangle(::Val{1024})
+function load_psi_tangle(::Val{1024}, resampling)
 	filename_fmt = expanduser("~/Dropbox/circulation/data/1024/2D/*2D_1024_slice2_t100.bin")
 	gp = ParamsGP((1024, 1024); L = (2π, 2π), c = 1.0, nxi = 1.5)
-	gp, load_psi(gp, filename_fmt)
+	load_psi(gp, filename_fmt; resampling)
 end
 	
-function load_psi_tangle(::Val{2048})
+function load_psi_tangle(::Val{2048}, resampling)
 	filename_fmt = expanduser("~/Dropbox/Data/gGP/Slices/Tangle2048/*2D_2048_slice340_t18.bin")
 	gp = ParamsGP((2048, 2048); L = (2π, 2π), c = 1.0, nxi = 1.5)
-	ψ = load_psi(gp, filename_fmt)
-	gp, ψ
+	load_psi(gp, filename_fmt; resampling)
 end
 
 end
 
 # ╔═╡ d7fb95b0-06de-11eb-3fb9-ed2c3a2981d4
-gp_in, ψ_in = load_psi_tangle(resolution);
-
-# ╔═╡ 4f067bc4-04c7-11eb-02cc-47b79114208c
-function resample_fields(gp_a, ψ_a, factor)
-	factor == 1 && return (gp_a, ψ_a)
-	plan_a = plan_fft(ψ_a; flags = FFTW.ESTIMATE | FFTW.PRESERVE_INPUT)
-	dims = factor .* size(gp_a)
-	ψ = similar(ψ_a, dims)
-	gp = ParamsGP(gp_a, dims=dims)
-	resample_field_fourier!(ψ, plan_a * ψ_a, gp_in)
-	ifft!(ψ)
-	gp, ψ
-end
-
-# ╔═╡ a67e27d4-06e6-11eb-1881-f9bdd88a7a07
-gp, ψ = resample_fields(gp_in, ψ_in, resampling);
+gp, ψ = load_psi_tangle(resolution, resampling);
 
 # ╔═╡ c4721330-04ba-11eb-0dc4-a7a6244c08bd
 gp
@@ -228,12 +206,17 @@ vint = IntegralField2D(fields.vs, L = gp.L);
 # ╔═╡ 304081f6-04c1-11eb-1533-a3699c44cdd2
 # Compute circulation on cells of circulation grid
 Γ = if from_convolution
-	let r = 1
+	let r = 2π / 16
 		Ns = size(gp)
 		Γ = Array{Float64}(undef, Ns...)
 		vs = fields.vs
 		vF = rfft.(vs)
-		circulation!(Γ, vF, r)
+		ks = GPFields.get_wavenumbers(gp, Val(:r2c))
+		kernel = RectangularKernel(r)
+		gF = DiscreteFourierKernel{Float64}(undef, ks...)
+		materialise!(gF, kernel)
+		circulation!(Γ, vF, gF)
+		Γ ./= gp.κ
 	end
 else
 	let r = grid_step
@@ -267,7 +250,7 @@ md"NaN circulation values: $Γ_nans"
 @assert maximum(abs2, ψ) > 0
 
 # ╔═╡ ac9a4426-06dd-11eb-241f-efd33a18c513
-extrema(abs2, ψ_in), extrema(abs2, ψ)
+extrema(abs2, ψ)
 
 # ╔═╡ 4fa45496-0714-11eb-362e-9bbe41380d02
 begin
@@ -283,8 +266,8 @@ begin
 		ωF = similar(vsF[1])
 		curlF!(ωF, vsF, gp)
 		ω = irfft(ωF, size(vs[1], 1))
-		x, y = get_coordinates(gp)
-		(; x, y, ω)
+		x, y = coordinates(gp)
+		(; x = x[1:end-1], y = y[1:end-1], ω)
 	end
 
 	function load_vorticity_slice(::Val{2048}, args...; kws...)
@@ -311,11 +294,8 @@ fig_slice = let
 	ax.set_xlabel(L"x")
 	ax.set_ylabel(L"y")
 	r0 = grid_step
-	x, y = map(get_coordinates(gp), (r0, r0)) do x, r
-		# Extend range to include x = 2π
-		step = x[2] - x[1]
-		z = range(first(x), length = length(x) + 1, step = step)
-		z[1:r:end]
+	x, y = map(coordinates(gp), (r0, r0)) do x, r
+		x[1:r:end]
 	end
 	@assert last(x) ≈ 2π
 	@assert length(x) == size(Γ, 1) + 1
@@ -362,8 +342,8 @@ fig_slice = let
 	fig.colorbar(cf, ax = ax, label = L"Γ / κ")
 	
 	if vort === nothing
-		let (x, y) = get_coordinates(gp)
-			plot_density!(ax, x, y, fields.ρ; alpha = 0.2)
+		let (x, y) = coordinates(gp)
+                    plot_density!(ax, x[1:end-1], y[1:end-1], fields.ρ; alpha = 0.2)
 		end
 	else
 		let step = 1
@@ -381,72 +361,6 @@ end
 
 # ╔═╡ 48963a30-06eb-11eb-30e3-d1a52d9a8f8a
 fig_slice.savefig("circulation_slice.svg")
-
-# ╔═╡ 45be1bfc-0fc7-11eb-1edd-7171b4959f76
-let r = pi / 8
-	fig, axes = plt.subplots(1, 2, figsize=(8, 4), dpi=120)
-	# ax.set_aspect(:equal)
-	N = 512
-	Lh = π
-	xs = range(0, 2Lh, length=(N + 1))[1:end-1]
-	ys = xs
-	g = zeros(N, N)
-	for j = 1:N, i = 1:N
-		x = xs[i]
-		y = ys[j]
-		# if (x - Lh)^2 + (y - Lh)^2 < r^2
-		if (x - Lh)^2 < r^2 && (y - Lh)^2 < r^2
-			g[i, j] = 1
-		end
-	end
-	let ax = axes[1]
-		ax.contourf(xs, ys, g')
-	end
-	kx = rfftfreq(N, N)
-	ky = fftfreq(N, N)
-	gF = rfft(g) ./ N
-	let ax = axes[2]
-		ax.plot(kx, gF[:, 1], "o-")
-		ks = range(2, 100, step=0.1)
-		rk = ks
-		J = -besselj1.(pi * rk) ./ rk * 110
-		# J = sinc.(rk) * 10
-		ax.plot(ks, J)
-		ax.set_xlim(-2, 20)
-	end
-	fig
-end
-
-# ╔═╡ 73e319fe-0fcb-11eb-320d-b77ff47a9bf8
-let r = pi / 8
-	fig, axes = plt.subplots(1, 2, figsize=(8, 4), dpi=120)
-	# ax.set_aspect(:equal)
-	N = 64
-	Lh = π
-	xs = range(0, 2Lh, length=(N + 1))[1:end-1]
-	g = zeros(N)
-	for i = 1:N
-		x = xs[i]
-		if (x - Lh)^2 < r^2
-			g[i] = 1
-		end
-	end
-	let ax = axes[1]
-		ax.plot(xs, g)
-	end
-	kx = rfftfreq(N, N)
-	gF = rfft(g) ./ sqrt(N)
-	let ax = axes[2]
-		ax.plot(kx, gF, "o-")
-		ks = range(1, 100, step=0.1)
-		rk = ks
-		# J = -besselj1.(rk) * 10
-		J = sinc.(rk) * 10
-		ax.plot(ks, J)
-		ax.set_xlim(-2, 20)
-	end
-	fig
-end
 
 # ╔═╡ Cell order:
 # ╟─93f9d4f2-04be-11eb-2bda-c35b6e65b22d
@@ -474,18 +388,13 @@ end
 # ╠═6531fd6e-0fab-11eb-063c-895e7d5ae867
 # ╠═e260a816-06ec-11eb-3416-9f11f837c6cd
 # ╟─afb6568e-0935-11eb-3b94-c10bedef706a
-# ╠═a67e27d4-06e6-11eb-1881-f9bdd88a7a07
 # ╠═9663eb22-06e6-11eb-3a2d-4d4912f69b4e
 # ╠═65ed010e-06e6-11eb-3975-ef0217acb6c0
 # ╠═d7fb95b0-06de-11eb-3fb9-ed2c3a2981d4
 # ╠═f8ca32e6-0714-11eb-2dd2-614e83339175
 # ╠═5b6111a8-06e1-11eb-28ff-1f80244d1529
 # ╠═ac9a4426-06dd-11eb-241f-efd33a18c513
-# ╠═4f067bc4-04c7-11eb-02cc-47b79114208c
 # ╠═9a742c84-04c5-11eb-1123-093a9f87394e
 # ╠═4fa45496-0714-11eb-362e-9bbe41380d02
 # ╠═16106ec4-04b8-11eb-032e-072f8a2efdcc
 # ╠═9040b526-04c6-11eb-3b36-77a97c91ed7a
-# ╠═5e07c81e-04c2-11eb-2eaf-3d6136e0ed3e
-# ╠═45be1bfc-0fc7-11eb-1edd-7171b4959f76
-# ╠═73e319fe-0fcb-11eb-320d-b77ff47a9bf8
