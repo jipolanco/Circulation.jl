@@ -14,6 +14,9 @@ using Reexport
 include("Kernels.jl")
 @reexport using .Kernels
 
+include("Grids.jl")
+@reexport using .Grids
+
 include("rectangle.jl")
 include("integral_field.jl")
 

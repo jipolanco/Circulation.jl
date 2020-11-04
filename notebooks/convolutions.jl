@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.12.5
+# v0.12.6
 
 using Markdown
 using InteractiveUtils
@@ -76,6 +76,27 @@ end
 
 # ╔═╡ 9c83146a-0ff1-11eb-3c9e-0fd52493550d
 md"# Circulation"
+
+# ╔═╡ c22a4a50-1eae-11eb-346c-3b5ccb501a5f
+function plot_circulation_grid!(ax, grid, gp)
+	pos, neg = Grids.POSITIVE, Grids.NEGATIVE
+	colours = Dict(pos => "tab:blue", neg => "tab:red")
+	Ns = size(grid[pos])
+	xy = map((N, L) -> range(0, L, length = N + 1), Ns, gp.L)
+	kws = (marker = :o, markeredgewidth = 2)
+	for I in CartesianIndices(grid[pos])
+		for sign in (pos, neg)
+			val = grid[sign][I]
+			iszero(val) && continue
+			xy_local = getindex.(xy, Tuple(I))
+			markersize = 6 * abs(val)
+			ax.plot(xy_local...; kws..., color = colours[sign], markersize)
+		end
+	end
+	# xygrid = Iterators.product(xy...)
+	# ax.scatter(xygrid; c=grid[pos])
+	ax
+end
 
 # ╔═╡ 191c1b62-0fe7-11eb-2a03-0f3402de0f1a
 md"# Setup"
@@ -192,7 +213,7 @@ let
 end
 
 # ╔═╡ 182f1376-0ff6-11eb-350e-a7265f281d7b
-resampling = 2
+resampling = 1
 
 # ╔═╡ dcf5911a-1043-11eb-0a2e-8778d99f43fb
 loop_size = π / 16
@@ -234,6 +255,21 @@ end;
 	Γ ./= gp.κ
 end;
 
+# ╔═╡ c23d43da-1e77-11eb-10b2-5553330282c3
+grid = let
+	dxy = round.(Int, loop_size ./ gp.dx)
+	grid = to_grid(Γ, dxy, Bool)
+end;
+
+# ╔═╡ e71bacde-1eb1-11eb-2aa3-d3f0fb5fdf61
+md"Positive / negative vortices found: $(sum.(grid))"
+
+# ╔═╡ 725c8474-1eb4-11eb-1424-dd9b7cba518e
+@benchmark to_grid!($grid, $Γ)
+
+# ╔═╡ c1441566-1e78-11eb-245d-c1eb79e84775
+@benchmark Grids.make_cell($Γ, CartesianIndex(2, 3), (4, 4))
+
 # ╔═╡ 3cf9e6d0-0ff5-11eb-23c0-4d20ff2e03b9
 let
 	fig, ax = plt.subplots()
@@ -249,6 +285,7 @@ let
 		ax.axhline.(xgrid; kws...)
 		ax.axvline.(xgrid; kws...)
 	end
+	plot_circulation_grid!(ax, grid, gp)
 	# ax.set_xlim(3, 4)
 	# ax.set_ylim(2pi - 0.4, 2pi)
 	fig
@@ -306,6 +343,11 @@ end
 # ╠═844a98c2-1042-11eb-0252-1fd8f242ea50
 # ╟─9c83146a-0ff1-11eb-3c9e-0fd52493550d
 # ╠═3233339a-0ff3-11eb-098c-51070a1c30d1
+# ╟─e71bacde-1eb1-11eb-2aa3-d3f0fb5fdf61
+# ╠═c23d43da-1e77-11eb-10b2-5553330282c3
+# ╠═725c8474-1eb4-11eb-1424-dd9b7cba518e
+# ╠═c1441566-1e78-11eb-245d-c1eb79e84775
+# ╠═c22a4a50-1eae-11eb-346c-3b5ccb501a5f
 # ╠═3cf9e6d0-0ff5-11eb-23c0-4d20ff2e03b9
 # ╠═d35e2c60-0ff4-11eb-08c5-1f045d375c4f
 # ╠═90dd9228-1043-11eb-3ec4-4f98237703e2
