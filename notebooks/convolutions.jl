@@ -189,11 +189,6 @@ let
 		ax.set_aspect(:equal)
 		kernel = EllipsoidalKernel(r)
 		wF = DiscreteFourierKernel(kernel, ks).mat
-		# wF = [
-		# 	# kernel_square_fourier(k..., r)
-		# 	kernel_circle_fourier(k..., (r, r); L = Ls)
-		# 	for k in Iterators.product(ks...)
-		# ]
 		w = brfft(wF, N) ./ Atotal
 		ax.set_xlim(0, xlim)
 		ax.set_ylim(0, xlim)
@@ -213,20 +208,25 @@ let
 end
 
 # ╔═╡ 182f1376-0ff6-11eb-350e-a7265f281d7b
-resampling = 1
+resampling = 2
 
-# ╔═╡ dcf5911a-1043-11eb-0a2e-8778d99f43fb
-loop_size = π / 16
+# ╔═╡ 53b02da8-1ec0-11eb-3d1d-0d8ee9eeefb4
+begin
+	function load_psi_resolution(::Val{256})
+		N = 256
+		slice = (:, :, 4)
+		workdir = gethostname() == "thinkpad" ? "~/Work" : "~/Work/Shared"
+		filenames = expanduser("$workdir/data/gGP_samples/tangle/256/fields/*Psi.001.dat")
+		gp_input = ParamsGP((N, N, N); L = (2pi, 2pi, 2pi), c = 1, nxi = 1.5)
+		load_psi(gp_input, filenames; slice, resampling)
+	end
+end
 
 # ╔═╡ 53b315bc-0fe4-11eb-30dc-a3785444134f
-gp, ψ = let
-	slice = (:, :, 4)
-	N = 256
-	workdir = gethostname() == "thinkpad" ? "~/Work" : "~/Work/Shared"
-	filenames = expanduser("$workdir/data/gGP_samples/tangle/256/fields/*Psi.001.dat")
-	gp_input = ParamsGP((N, N, N); L = (2pi, 2pi, 2pi), c = 1, nxi = 1.5)
-	load_psi(gp_input, filenames; slice, resampling)
-end;
+gp, ψ = load_psi_resolution(Val(256));
+
+# ╔═╡ dcf5911a-1043-11eb-0a2e-8778d99f43fb
+loop_size = gp.dx[1] * resampling * 8
 
 # ╔═╡ 796b337c-0ff1-11eb-2ba9-97f399308235
 begin
@@ -257,12 +257,15 @@ end;
 
 # ╔═╡ c23d43da-1e77-11eb-10b2-5553330282c3
 grid = let
-	dxy = round.(Int, loop_size ./ gp.dx)
-	grid = to_grid(Γ, dxy, Bool)
+	dxy = round.(Int, loop_size ./ gp.dx)  # .>> 1
+	grid = to_grid(Γ, dxy, Bool; κ = 1, int_threshold = 0.01)
 end;
 
 # ╔═╡ e71bacde-1eb1-11eb-2aa3-d3f0fb5fdf61
 md"Positive / negative vortices found: $(sum.(grid))"
+
+# ╔═╡ 0491c7c6-1ec1-11eb-2621-19f081b1024f
+grid_circulation = grid[Grids.POSITIVE] .- grid[Grids.NEGATIVE];
 
 # ╔═╡ 725c8474-1eb4-11eb-1424-dd9b7cba518e
 @benchmark to_grid!($grid, $Γ)
@@ -286,8 +289,8 @@ let
 		ax.axvline.(xgrid; kws...)
 	end
 	plot_circulation_grid!(ax, grid, gp)
-	# ax.set_xlim(3, 4)
-	# ax.set_ylim(2pi - 0.4, 2pi)
+	# ax.set_xlim(3.8, 4.2)
+	# ax.set_ylim(1.8, 2.2)
 	fig
 end
 
@@ -312,8 +315,10 @@ let
 	M = 4.2
 	bins = range(-M, M, length=400)
 	# bins = 400
-	ax.hist(vec(Γ); bins, label=:convolution, density=true)
-	ax.hist(vec(Γ_orig); bins, alpha=0.5, label=:original, density=true)
+	kws = (; bins, density = true)
+	ax.hist(vec(Γ); kws..., label=:convolution)
+	ax.hist(vec(Γ_orig); kws..., alpha=0.5, label=:original)
+	ax.hist(vec(grid_circulation); kws..., alpha=0.4, label=:grid)
 	# ax.axvline.(-3:3, ls=:dotted, color="tab:grey", zorder=-1)
 	ax.legend()
 	fig
@@ -345,6 +350,7 @@ end
 # ╠═3233339a-0ff3-11eb-098c-51070a1c30d1
 # ╟─e71bacde-1eb1-11eb-2aa3-d3f0fb5fdf61
 # ╠═c23d43da-1e77-11eb-10b2-5553330282c3
+# ╠═0491c7c6-1ec1-11eb-2621-19f081b1024f
 # ╠═725c8474-1eb4-11eb-1424-dd9b7cba518e
 # ╠═c1441566-1e78-11eb-245d-c1eb79e84775
 # ╠═c22a4a50-1eae-11eb-346c-3b5ccb501a5f
@@ -357,6 +363,7 @@ end
 # ╠═182f1376-0ff6-11eb-350e-a7265f281d7b
 # ╠═dcf5911a-1043-11eb-0a2e-8778d99f43fb
 # ╠═53b315bc-0fe4-11eb-30dc-a3785444134f
+# ╠═53b02da8-1ec0-11eb-3d1d-0d8ee9eeefb4
 # ╠═03a544c0-103c-11eb-2e30-1d6e829715c1
 # ╠═3711a71a-0fe5-11eb-0698-0d3290290f00
 # ╠═796b337c-0ff1-11eb-2ba9-97f399308235
