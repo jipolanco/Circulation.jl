@@ -55,6 +55,12 @@ Base.show(io::IO, d::DiagonalSearch) = print(io, "DiagonalSearch(d.int_threshold
     BestInteger <: FindIntMethod
 
 Find the value that is closest to an integer among values of a cell.
+
+This is done by determining the floating point value that is closest to an
+integer.
+
+Gives priority to values on the lower left corner of the cell, assigning
+increasingly larger error weights as the distance from this corner increases.
 """
 struct BestInteger <: FindIntMethod end
 
@@ -102,13 +108,14 @@ end
 
 function find_int(::BestInteger, cell::AbstractArray; κ = 1)
     s = zero(Int)
-    err_best = 1.0
-    for v in cell
-        Γ = v / κ
+    err_best = Inf
+    for I in CartesianIndices(cell)
+        Γ = cell[I] / κ
+        ω = sum(n -> abs2(n - 1), Tuple(I))  # radial weight
         Γ_int = round(Int, Γ)
-        err = abs(Γ - Γ_int)
+        err = abs(Γ - Γ_int) * (1 + ω)
         if err < err_best
-            err_best = err
+            err_best = err :: Float64
             s = Γ_int
         end
     end

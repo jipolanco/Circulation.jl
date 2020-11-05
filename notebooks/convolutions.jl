@@ -17,10 +17,10 @@ begin
 	
 	ENV["MPLBACKEND"] = "Agg"
 	import PyPlot
+	PyPlot.matplotlib.interactive(false)
 	using LaTeXStrings
 	const plt = PyPlot.plt
 	const mpl = plt.matplotlib
-	mpl.interactive(false)
 end;
 
 # ╔═╡ 1ee3cc7a-0fe7-11eb-2a43-59039c95d09e
@@ -36,15 +36,6 @@ function besselj1_norm(x)
 		y = π * x
 		2 * besselj1(y) / y
 	end :: T
-end
-
-# ╔═╡ b3d8987a-11e4-11eb-0992-2770e3477dcc
-let
-	fig, ax = plt.subplots()
-	x = 0:0.1:10
-	ax.plot(x, sinc.(x))
-	ax.plot(x, besselj1_norm.(x))
-	fig
 end
 
 # ╔═╡ 2ff03896-0fec-11eb-2c47-edd0e6364f8c
@@ -80,19 +71,53 @@ md"# Circulation"
 # ╔═╡ d7ea2b1c-1f67-11eb-10f0-d728a65f971a
 grid_method = Grids.BestInteger()
 
+# ╔═╡ 6087e9f2-1f70-11eb-0bcd-a1d7a7393e53
+md"# Workaround Matplotlib memory issues"
+
+# ╔═╡ 70c43120-1f70-11eb-26d9-ed5a24ac5611
+mutable struct Figure{F}
+	fig :: F
+	function Figure(fig)
+		this = new{typeof(fig)}(fig)
+		finalizer(this) do
+			plt.close(this.fig)
+			this
+		end
+		this
+	end
+end
+
+# ╔═╡ d96ada3c-1f70-11eb-23e1-59ed12ef1275
+function subplots(args...; kwargs...)
+	fig, ax = plt.subplots(args...; kwargs...)
+	Figure(fig), ax
+end
+
+# ╔═╡ f6c0b32c-1f70-11eb-0235-2b379c4d76c7
+fig, ax = subplots()
+
+# ╔═╡ b3d8987a-11e4-11eb-0992-2770e3477dcc
+let
+	fig, ax = plt.subplots()
+	x = 0:0.1:10
+	ax.plot(x, sinc.(x))
+	ax.plot(x, besselj1_norm.(x))
+	fig
+end
+
 # ╔═╡ c22a4a50-1eae-11eb-346c-3b5ccb501a5f
 function plot_circulation_grid!(ax, grid, gp)
 	pos, neg = Grids.POSITIVE, Grids.NEGATIVE
 	colours = Dict(pos => "tab:blue", neg => "tab:red")
 	Ns = size(grid[pos])
 	xy = map((N, L) -> range(0, L, length = N + 1), Ns, gp.L)
-	kws = (marker = :o, markeredgewidth = 2)
+	kws = (marker = :o, markeredgewidth = 1, alpha = 0.6)
 	for I in CartesianIndices(grid[pos])
 		for sign in (pos, neg)
 			val = grid[sign][I]
 			iszero(val) && continue
 			xy_local = map(xy, Tuple(I)) do x, i
-				(3x[i] + x[i + 1]) / 4
+				(3x[i] + x[i + 1]) / 4  # centre of lower left quarter
 			end
 			markersize = 6 * abs(val)
 			ax.plot(xy_local...; kws..., color = colours[sign], markersize)
@@ -102,6 +127,12 @@ function plot_circulation_grid!(ax, grid, gp)
 	# ax.scatter(xygrid; c=grid[pos])
 	ax
 end
+
+# ╔═╡ 0bcd2fb6-1f71-11eb-18e2-05de1a9281ab
+plt.get_fignums()
+
+# ╔═╡ 52e7ca14-1f71-11eb-16a2-511d09723ec4
+finalize(fig)
 
 # ╔═╡ 191c1b62-0fe7-11eb-2a03-0f3402de0f1a
 md"# Setup"
@@ -300,11 +331,8 @@ grid_circulation = grid[Grids.POSITIVE] .- grid[Grids.NEGATIVE];
 
 # ╔═╡ 725c8474-1eb4-11eb-1424-dd9b7cba518e
 let g = similar.(grid)
-	@benchmark to_grid!($g, $Γ, grid_method)
+	@benchmark to_grid!($g, $Γ, $grid_method)
 end
-
-# ╔═╡ c1441566-1e78-11eb-245d-c1eb79e84775
-@benchmark Grids.make_cell($Γ, CartesianIndex(2, 3), (4, 4))
 
 # ╔═╡ 3cf9e6d0-0ff5-11eb-23c0-4d20ff2e03b9
 let
@@ -321,9 +349,9 @@ let
 	# 	ax.axhline.(xgrid; kws...)
 	# 	ax.axvline.(xgrid; kws...)
 	# end
-	@time plot_circulation_grid!(ax, grid, gp)
-	# ax.set_xlim(0, π)
-	# ax.set_ylim(0, π)
+	plot_circulation_grid!(ax, grid, gp)
+	# ax.set_xlim(0, π/2)
+	# ax.set_ylim(0, π/2)
 	fig
 end
 
@@ -387,11 +415,16 @@ end
 # ╠═c23d43da-1e77-11eb-10b2-5553330282c3
 # ╠═0491c7c6-1ec1-11eb-2621-19f081b1024f
 # ╠═725c8474-1eb4-11eb-1424-dd9b7cba518e
-# ╠═c1441566-1e78-11eb-245d-c1eb79e84775
 # ╠═c22a4a50-1eae-11eb-346c-3b5ccb501a5f
 # ╠═3cf9e6d0-0ff5-11eb-23c0-4d20ff2e03b9
 # ╠═d35e2c60-0ff4-11eb-08c5-1f045d375c4f
 # ╠═90dd9228-1043-11eb-3ec4-4f98237703e2
+# ╟─6087e9f2-1f70-11eb-0bcd-a1d7a7393e53
+# ╠═70c43120-1f70-11eb-26d9-ed5a24ac5611
+# ╠═d96ada3c-1f70-11eb-23e1-59ed12ef1275
+# ╠═f6c0b32c-1f70-11eb-0235-2b379c4d76c7
+# ╠═0bcd2fb6-1f71-11eb-18e2-05de1a9281ab
+# ╠═52e7ca14-1f71-11eb-16a2-511d09723ec4
 # ╟─191c1b62-0fe7-11eb-2a03-0f3402de0f1a
 # ╠═6161103a-0fe7-11eb-1186-29294ece4afd
 # ╠═1bd240ea-0fef-11eb-293b-c9e8f84b4e06
