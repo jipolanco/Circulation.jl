@@ -208,7 +208,7 @@ let
 end
 
 # ╔═╡ 182f1376-0ff6-11eb-350e-a7265f281d7b
-resampling = 2
+resampling = 4
 
 # ╔═╡ 53b02da8-1ec0-11eb-3d1d-0d8ee9eeefb4
 begin
@@ -220,13 +220,22 @@ begin
 		gp_input = ParamsGP((N, N, N); L = (2pi, 2pi, 2pi), c = 1, nxi = 1.5)
 		load_psi(gp_input, filenames; slice, resampling)
 	end
+	
+	function load_psi_resolution(::Val{1024})
+		N = 1024
+		slice = 4  # in [0, 9]
+		workdir = gethostname() == "thinkpad" ? nothing : "~/Work"
+		filenames = expanduser("$workdir/data/Circulation/gGP/1024/2D/*2D_1024_slice$(slice)_t100.bin")
+		gp_input = ParamsGP((N, N); L = (2pi, 2pi), c = 1, nxi = 1.5)
+		load_psi(gp_input, filenames; resampling)
+	end
 end
 
 # ╔═╡ 53b315bc-0fe4-11eb-30dc-a3785444134f
-gp, ψ = load_psi_resolution(Val(256));
+gp, ψ = load_psi_resolution(Val(1024));
 
 # ╔═╡ dcf5911a-1043-11eb-0a2e-8778d99f43fb
-loop_size = gp.dx[1] * resampling * 8
+loop_size = gp.dx[1] * resampling * 2
 
 # ╔═╡ 796b337c-0ff1-11eb-2ba9-97f399308235
 begin
@@ -258,7 +267,7 @@ end;
 # ╔═╡ c23d43da-1e77-11eb-10b2-5553330282c3
 grid = let
 	dxy = round.(Int, loop_size ./ gp.dx)  # .>> 1
-	grid = to_grid(Γ, dxy, Bool; κ = 1, int_threshold = 0.01)
+	grid = to_grid(Γ, dxy, Grids.BestInteger(), Int; κ = 1)
 end;
 
 # ╔═╡ e71bacde-1eb1-11eb-2aa3-d3f0fb5fdf61
@@ -282,15 +291,15 @@ let
 		cmap=plt.cm.RdBu, shading=:flat)
 	fig.colorbar(cf; ax, label=L"Γ / κ")
 	xgrid = range(0, 2π, step=loop_size)[1:end-1]
-	ax.contour(xy_in..., ρ', levels=[0.1, ])
+	ax.contour(xy_in..., ρ', levels=[0.02, ])
 	ax.set_title("r = $(loop_size / π) π")
-	let kws = (lw = 0.5, c = "0.6")
-		ax.axhline.(xgrid; kws...)
-		ax.axvline.(xgrid; kws...)
-	end
+	# let kws = (lw = 0.5, c = "0.6")
+	# 	ax.axhline.(xgrid; kws...)
+	# 	ax.axvline.(xgrid; kws...)
+	# end
 	plot_circulation_grid!(ax, grid, gp)
-	# ax.set_xlim(3.8, 4.2)
-	# ax.set_ylim(1.8, 2.2)
+	ax.set_xlim(0, π)
+	ax.set_ylim(0, π)
 	fig
 end
 

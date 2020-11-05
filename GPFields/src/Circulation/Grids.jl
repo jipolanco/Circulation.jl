@@ -6,6 +6,7 @@ Functions for construction of circulation "grids".
 module Grids
 
 export to_grid, to_grid!
+import Base: @kwdef
 
 const IntOrBool = Union{Integer, Bool}
 
@@ -22,24 +23,103 @@ const CirculationGrid{T} = NTuple{2,AbstractMatrix{T}} where {T <: IntOrBool}
 const POSITIVE = 1
 const NEGATIVE = 2
 
+const DEFAULT_INT_THRESHOLD = 0.05
+
 """
-    to_grid!(g::CirculationGrid, Γ::AbstractMatrix; κ = 1, int_threshold = 0.05)
+    FindIntMethod
+
+Abstract type representing an integer finding method within an array of floating
+point values.
+"""
+abstract type FindIntMethod end
+
+"""
+    DiagonalSearch <: FindIntMethod
+
+Find the first value that is sufficiently close to an integer.
+
+Cells are searched diagonally starting from index `(1, 1)`.
+
+Takes a threshold (should be in ``[0, 0.5]``) as an optional parameter:
+
+    DiagonalSearch(; int_threshold = $DEFAULT_INT_THRESHOLD)
+
+"""
+@kwdef struct DiagonalSearch <: FindIntMethod
+    int_threshold :: Int = DEFAULT_INT_THRESHOLD
+end
+
+"""
+    BestInteger <: FindIntMethod
+
+Find the value that is closest to an integer, among all values of the cell.
+"""
+struct BestInteger <: FindIntMethod end
+
+"""
+    find_int(method::FindIntMethod, cell::AbstractArray; κ = 1)
+
+Find "best" integer value within array of floating point values.
+
+Values are divided by κ before searching for integers.
+"""
+function find_int end
+
+function find_int(method::DiagonalSearch, cell::AbstractArray; κ = 1)
+    # The first candidate is the corner (1, 1). Then we start looking by
+    # diagonally increasing the position.
+    s = zero(Int)
+    good = false
+    Base.require_one_based_indexing(cell)
+    I = first(CartesianIndices(cell))  # = (1, 1)
+    dI = I  # diagonal increment
+    M = min(size(cell)...)
+    for i = 1:M
+        Γ = cell[I] / κ
+        I += dI
+        s = round(Int, Γ)
+        isint = abs(Γ - s) ≤ method.int_threshold  # value is considered an integer
+        if isint
+            good = true
+            break
+        end
+    end
+    good, s
+end
+
+function find_int(::BestInteger, cell::AbstractArray; κ = 1)
+    s = zero(Int)
+    err_best = 1.0
+    for v in cell
+        Γ = v / κ
+        Γ_int = round(Int, Γ)
+        err = abs(Γ - Γ_int)
+        if err < err_best
+            err_best = err
+            s = Γ_int
+        end
+    end
+    good = true
+    good, s
+end
+
+"""
+    to_grid!(g::CirculationGrid, Γ::AbstractMatrix, method = BestInteger(); κ = 1)
 
 Convert small-scale circulation field to its grid representation.
 
-The `int_threshold` argument determines the threshold below which a real value
-is interpreted as an integer. For instance, 2.07 is rounded to 2 only if
-`int_threshold ≥ 0.07`.
+The `method` argument determines the way integer values of `Γ / κ` are identified.
 
 See also [`to_grid`](@ref).
 """
-function to_grid!(g::CirculationGrid, Γ::AbstractMatrix; kws...)
+function to_grid!(g::CirculationGrid, Γ::AbstractMatrix,
+                  method::FindIntMethod = BestInteger(); kws...)
     steps = size(Γ) .÷ size(g[POSITIVE])
-    to_grid!(g, Γ, steps; kws...)
+    to_grid!(g, Γ, steps, method; kws...)
 end
 
-function to_grid!(g::CirculationGrid{T}, Γ::AbstractMatrix, steps::Dims;
-                  kws...) where {T}
+function to_grid!(g::CirculationGrid{T}, Γ::AbstractMatrix, steps::Dims,
+                  method::FindIntMethod = BestInteger(); kws...) where {T}
     gpos = g[POSITIVE]
     gneg = g[NEGATIVE]
     @assert size(gpos) == size(gneg)
@@ -47,35 +127,17 @@ function to_grid!(g::CirculationGrid{T}, Γ::AbstractMatrix, steps::Dims;
     fill!.(g, zero(T))
     for I in CartesianIndices(gpos)
         cell = make_cell(Γ, I, steps)
-        sign, val = cell_spin(cell; kws...)
+        sign, val = cell_spin(cell, method; kws...)
         @inbounds g[sign][I] = val
     end
     g
 end
 
-function cell_spin(cell::AbstractArray; κ = 1, int_threshold = 0.05)
-    # Search for the first circulation in {-1, 0, 1} within the cell.
-    # This allows to skip spurious values.
-    # The first candidate is the corner (1, 1). Then we start looking by
-    # diagonally increasing the position.
-    s = zero(Int)
-    good = false
-    M = min(size(cell)...)
-    Base.require_one_based_indexing(cell)
-    I = first(CartesianIndices(cell))  # = (1, 1)
-    dI = I  # diagonal increment
-    for i = 1:M
-        Γ = cell[I] / κ
-        I += dI
-        s = round(Int, Γ)
-        isint = abs(Γ - s) ≤ int_threshold  # value is considered an integer
-        if isint && abs(s) ≤ 1
-            good = true
-            break
-        end
-    end
+function cell_spin(cell::AbstractArray, method; kws...)
+    good, s = find_int(method, cell; kws...)
     if !good
-        error("couldn't find Γ/κ ∈ {-1, 0, 1}. Maybe try modifying the loop size?")
+        error("""couldn't find Γ/κ ∈ {-1, 0, 1}.
+              Try increasing the loop size or int_threshold.""")
     end
     if s ≥ 0
         POSITIVE, s
@@ -93,7 +155,8 @@ function make_cell(Γ, I, steps)
 end
 
 """
-    to_grid(Γ::AbstractMatrix, steps, ::Type{T} = Bool; kws...)
+    to_grid(Γ::AbstractMatrix, steps, [method = BestInteger()], [::Type{T} = Bool];
+            kws...)
 
 Convert small-scale circulation field to its grid representation.
 
@@ -106,11 +169,15 @@ that circulations are within the set `{0, ±κ}`.
 
 See [`to_grid!`] for possible keyword arguments.
 """
-function to_grid(Γ::AbstractMatrix, steps::Dims, ::Type{T} = Bool;
-                 kws...) where {T}
+function to_grid(Γ::AbstractMatrix, steps::Dims,
+                 method::FindIntMethod = BestInteger(),
+                 ::Type{T} = Bool; kws...) where {T}
     gpos = Array{T}(undef, size(Γ) .÷ steps)
     g = (gpos, similar(gpos))
-    to_grid!(g, Γ, steps; kws...)
+    to_grid!(g, Γ, steps, method; kws...)
 end
+
+@inline to_grid(Γ::AbstractMatrix, steps::Dims, ::Type{T}; kws...) where {T} =
+    to_grid(Γ, steps, BestInteger(), T; kws...)
 
 end
