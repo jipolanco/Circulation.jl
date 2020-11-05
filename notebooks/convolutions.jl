@@ -77,6 +77,9 @@ end
 # ╔═╡ 9c83146a-0ff1-11eb-3c9e-0fd52493550d
 md"# Circulation"
 
+# ╔═╡ d7ea2b1c-1f67-11eb-10f0-d728a65f971a
+grid_method = Grids.BestInteger()
+
 # ╔═╡ c22a4a50-1eae-11eb-346c-3b5ccb501a5f
 function plot_circulation_grid!(ax, grid, gp)
 	pos, neg = Grids.POSITIVE, Grids.NEGATIVE
@@ -89,7 +92,7 @@ function plot_circulation_grid!(ax, grid, gp)
 			val = grid[sign][I]
 			iszero(val) && continue
 			xy_local = map(xy, Tuple(I)) do x, i
-				(x[i] + x[i + 1]) / 2
+				(3x[i] + x[i + 1]) / 4
 			end
 			markersize = 6 * abs(val)
 			ax.plot(xy_local...; kws..., color = colours[sign], markersize)
@@ -217,7 +220,7 @@ hostname = Symbol(replace(gethostname(), '.' => '_'))
 
 # ╔═╡ 53b02da8-1ec0-11eb-3d1d-0d8ee9eeefb4
 begin
-	function load_psi_resolution(::Val{256}, ::Val{host}) where {host}
+	function load_psi_resolution(::Val{256}, ::Val{host}, resampling) where {host}
 		N = 256
 		slice = (:, :, 4)
 		workdir = host == :thinkpad ? "~/Work" : "~/Work/Shared"
@@ -226,7 +229,7 @@ begin
 		load_psi(gp_input, filenames; slice, resampling)
 	end
 	
-	function load_psi_resolution(::Val{1024}, ::Val{host}) where {host}
+	function load_psi_resolution(::Val{1024}, ::Val{host}, resampling) where {host}
 		N = 1024
 		slice = 4  # in [0, 9]
 		workdir = host == :thinkpad ? nothing : "~/Work"
@@ -235,7 +238,7 @@ begin
 		load_psi(gp_input, filenames; resampling)
 	end
 	
-	function load_psi_resolution(::Val{1024}, ::Val{:castor_cluster_local})
+	function load_psi_resolution(::Val{1024}, ::Val{:castor_cluster_local}, resampling)
 		N = 1024
 		slice = (:, :, 4)
 		# filenames = expanduser("$workdir/data/Circulation/gGP/1024/2D/*2D_1024_slice$(slice)_t100.bin")
@@ -250,6 +253,7 @@ end
 gp, ψ = load_psi_resolution(
 	Val(1024),
 	Val(hostname),
+	resampling,
 );
 
 # ╔═╡ dcf5911a-1043-11eb-0a2e-8778d99f43fb
@@ -286,7 +290,7 @@ end;
 end;
 
 # ╔═╡ c23d43da-1e77-11eb-10b2-5553330282c3
-grid = to_grid(Γ, cell_step, Grids.BestInteger(), Int; κ = 1);
+grid = to_grid(Γ, cell_step, grid_method, Int; κ = 1);
 
 # ╔═╡ e71bacde-1eb1-11eb-2aa3-d3f0fb5fdf61
 md"Positive / negative vortices found: $(sum.(grid))"
@@ -295,29 +299,31 @@ md"Positive / negative vortices found: $(sum.(grid))"
 grid_circulation = grid[Grids.POSITIVE] .- grid[Grids.NEGATIVE];
 
 # ╔═╡ 725c8474-1eb4-11eb-1424-dd9b7cba518e
-@benchmark to_grid!($grid, $Γ)
+let g = similar.(grid)
+	@benchmark to_grid!($g, $Γ, grid_method)
+end
 
 # ╔═╡ c1441566-1e78-11eb-245d-c1eb79e84775
 @benchmark Grids.make_cell($Γ, CartesianIndex(2, 3), (4, 4))
 
 # ╔═╡ 3cf9e6d0-0ff5-11eb-23c0-4d20ff2e03b9
 let
-	fig, ax = plt.subplots(dpi = 300)
+	fig, ax = plt.subplots(dpi = 200)
 	ax.set_aspect(:equal)
 	vmax = 4
 	cf = ax.pcolormesh(xy..., Γ'; vmax, vmin=-vmax,
 		cmap=plt.cm.RdBu, shading=:flat)
 	fig.colorbar(cf; ax, label=L"Γ / κ")
 	xgrid = range(0, 2π, step=loop_size)[1:end-1]
-	ax.contour(xy_in..., ρ', levels=[0.02, ])
-	ax.set_title("r = $(loop_size / π) π")
+	ax.contour(xy_in..., ρ', levels=[0.04, ])
+	ax.set_title("r = $(loop_size / π) π — $grid_method")
 	# let kws = (lw = 0.5, c = "0.6")
 	# 	ax.axhline.(xgrid; kws...)
 	# 	ax.axvline.(xgrid; kws...)
 	# end
-	plot_circulation_grid!(ax, grid, gp)
-	ax.set_xlim(0, π)
-	ax.set_ylim(0, π)
+	@time plot_circulation_grid!(ax, grid, gp)
+	# ax.set_xlim(0, π)
+	# ax.set_ylim(0, π)
 	fig
 end
 
@@ -377,6 +383,7 @@ end
 # ╠═3233339a-0ff3-11eb-098c-51070a1c30d1
 # ╟─e71bacde-1eb1-11eb-2aa3-d3f0fb5fdf61
 # ╠═e4589a9c-1f57-11eb-264d-014214a80357
+# ╠═d7ea2b1c-1f67-11eb-10f0-d728a65f971a
 # ╠═c23d43da-1e77-11eb-10b2-5553330282c3
 # ╠═0491c7c6-1ec1-11eb-2621-19f081b1024f
 # ╠═725c8474-1eb4-11eb-1424-dd9b7cba518e

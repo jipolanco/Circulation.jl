@@ -49,17 +49,25 @@ Takes a threshold (should be in ``[0, 0.5]``) as an optional parameter:
     int_threshold :: Float64 = DEFAULT_INT_THRESHOLD
 end
 
+Base.show(io::IO, d::DiagonalSearch) = print(io, "DiagonalSearch(d.int_threshold)")
+
 """
     BestInteger <: FindIntMethod
 
 Find the value that is closest to an integer among values of a cell.
-
-Only half of the cell is considered along each dimension. For instance, if the
-cell has dimensions 8×8, only the lower left corner of dimensions 4×4 is
-considered. This is to avoid single vortices from being identified multiple
-times, by neighbouring cells.
 """
 struct BestInteger <: FindIntMethod end
+
+Base.show(io::IO, ::BestInteger) = print(io, "BestInteger()")
+
+"""
+    RoundAverage <: FindIntMethod
+
+Compute average value within a cell, then round it to the nearest integer.
+"""
+struct RoundAverage <: FindIntMethod end
+
+Base.show(io::IO, ::RoundAverage) = print(io, "RoundAverage()")
 
 """
     find_int(method::FindIntMethod, cell::AbstractArray; κ = 1)
@@ -93,12 +101,9 @@ function find_int(method::DiagonalSearch, cell::AbstractArray; κ = 1)
 end
 
 function find_int(::BestInteger, cell::AbstractArray; κ = 1)
-    Base.require_one_based_indexing(cell)
-    hs = size(cell) .>> 1  # half size of the cell
-    subcell = view(cell, Base.OneTo.(hs)...)
     s = zero(Int)
     err_best = 1.0
-    for v in subcell
+    for v in cell
         Γ = v / κ
         Γ_int = round(Int, Γ)
         err = abs(Γ - Γ_int)
@@ -109,6 +114,12 @@ function find_int(::BestInteger, cell::AbstractArray; κ = 1)
     end
     good = true
     good, s
+end
+
+function find_int(::RoundAverage, cell::AbstractArray; κ = 1)
+    mean = sum(cell) / (length(cell) * κ)
+    good = true
+    good, round(Int, mean)
 end
 
 """
@@ -156,8 +167,9 @@ end
 
 function make_cell(Γ, I, steps)
     ranges = map(Tuple(I), steps) do i, δ
+        h = δ >> 1  # half the total step
         j = (i - 1) * δ
-        (j + 1):(j + δ)
+        (j + 1):(j + h)
     end
     view(Γ, ranges...)
 end
@@ -169,7 +181,12 @@ end
 Convert small-scale circulation field to its grid representation.
 
 The `steps` represent the integer step size of the grid. For instance, if `steps
-= (4, 4)`, the output grid is 4×4 times coarser than the dimensions of `Γ`.
+= (8, 8)`, the output grid is 8×8 times coarser than the dimensions of `Γ`.
+
+The algorithm divides `Γ` into cells of size given by `steps` (8×8 cells in the
+example). Only the lower left quarter of each cell (a 4×4 matrix) is considered
+to determine the circulation of that cell. This is to avoid duplicated
+identification of vortices that influence multiple neighbouring cells.
 
 Ideally, the grid step should be equal to the loop size used to compute the
 circulation. Moreover, if `T` is `Bool`, the loop size must be small enough so
