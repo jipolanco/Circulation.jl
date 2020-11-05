@@ -88,7 +88,9 @@ function plot_circulation_grid!(ax, grid, gp)
 		for sign in (pos, neg)
 			val = grid[sign][I]
 			iszero(val) && continue
-			xy_local = getindex.(xy, Tuple(I))
+			xy_local = map(xy, Tuple(I)) do x, i
+				(x[i] + x[i + 1]) / 2
+			end
 			markersize = 6 * abs(val)
 			ax.plot(xy_local...; kws..., color = colours[sign], markersize)
 		end
@@ -208,34 +210,53 @@ let
 end
 
 # ╔═╡ 182f1376-0ff6-11eb-350e-a7265f281d7b
-resampling = 4
+resampling = 2
+
+# ╔═╡ 7ac7dda2-1f4f-11eb-0a96-897e81ea4742
+hostname = Symbol(replace(gethostname(), '.' => '_'))
 
 # ╔═╡ 53b02da8-1ec0-11eb-3d1d-0d8ee9eeefb4
 begin
-	function load_psi_resolution(::Val{256})
+	function load_psi_resolution(::Val{256}, ::Val{host}) where {host}
 		N = 256
 		slice = (:, :, 4)
-		workdir = gethostname() == "thinkpad" ? "~/Work" : "~/Work/Shared"
+		workdir = host == :thinkpad ? "~/Work" : "~/Work/Shared"
 		filenames = expanduser("$workdir/data/gGP_samples/tangle/256/fields/*Psi.001.dat")
 		gp_input = ParamsGP((N, N, N); L = (2pi, 2pi, 2pi), c = 1, nxi = 1.5)
 		load_psi(gp_input, filenames; slice, resampling)
 	end
 	
-	function load_psi_resolution(::Val{1024})
+	function load_psi_resolution(::Val{1024}, ::Val{host}) where {host}
 		N = 1024
 		slice = 4  # in [0, 9]
-		workdir = gethostname() == "thinkpad" ? nothing : "~/Work"
+		workdir = host == :thinkpad ? nothing : "~/Work"
 		filenames = expanduser("$workdir/data/Circulation/gGP/1024/2D/*2D_1024_slice$(slice)_t100.bin")
 		gp_input = ParamsGP((N, N); L = (2pi, 2pi), c = 1, nxi = 1.5)
 		load_psi(gp_input, filenames; resampling)
 	end
+	
+	function load_psi_resolution(::Val{1024}, ::Val{:castor_cluster_local})
+		N = 1024
+		slice = (:, :, 4)
+		# filenames = expanduser("$workdir/data/Circulation/gGP/1024/2D/*2D_1024_slice$(slice)_t100.bin")
+		filenames = joinpath(ENV["SCRATCHDIR"], "..", "nmuller", "circulation",
+			"1024", "dataGP", "*Psi.300.dat")
+		gp_input = ParamsGP((N, N, N); L = (2pi, 2pi, 2pi), c = 1, nxi = 1.5)
+		load_psi(gp_input, filenames; slice, resampling)
+	end
 end
 
 # ╔═╡ 53b315bc-0fe4-11eb-30dc-a3785444134f
-gp, ψ = load_psi_resolution(Val(1024));
+gp, ψ = load_psi_resolution(
+	Val(1024),
+	Val(hostname),
+);
 
 # ╔═╡ dcf5911a-1043-11eb-0a2e-8778d99f43fb
-loop_size = gp.dx[1] * resampling * 2
+loop_size = gp.dx[1] * resampling * 4
+
+# ╔═╡ e4589a9c-1f57-11eb-264d-014214a80357
+cell_step = round.(Int, loop_size ./ gp.dx)
 
 # ╔═╡ 796b337c-0ff1-11eb-2ba9-97f399308235
 begin
@@ -265,10 +286,7 @@ end;
 end;
 
 # ╔═╡ c23d43da-1e77-11eb-10b2-5553330282c3
-grid = let
-	dxy = round.(Int, loop_size ./ gp.dx)  # .>> 1
-	grid = to_grid(Γ, dxy, Grids.BestInteger(), Int; κ = 1)
-end;
+grid = to_grid(Γ, cell_step, Grids.BestInteger(), Int; κ = 1);
 
 # ╔═╡ e71bacde-1eb1-11eb-2aa3-d3f0fb5fdf61
 md"Positive / negative vortices found: $(sum.(grid))"
@@ -284,7 +302,7 @@ grid_circulation = grid[Grids.POSITIVE] .- grid[Grids.NEGATIVE];
 
 # ╔═╡ 3cf9e6d0-0ff5-11eb-23c0-4d20ff2e03b9
 let
-	fig, ax = plt.subplots()
+	fig, ax = plt.subplots(dpi = 300)
 	ax.set_aspect(:equal)
 	vmax = 4
 	cf = ax.pcolormesh(xy..., Γ'; vmax, vmin=-vmax,
@@ -358,6 +376,7 @@ end
 # ╟─9c83146a-0ff1-11eb-3c9e-0fd52493550d
 # ╠═3233339a-0ff3-11eb-098c-51070a1c30d1
 # ╟─e71bacde-1eb1-11eb-2aa3-d3f0fb5fdf61
+# ╠═e4589a9c-1f57-11eb-264d-014214a80357
 # ╠═c23d43da-1e77-11eb-10b2-5553330282c3
 # ╠═0491c7c6-1ec1-11eb-2621-19f081b1024f
 # ╠═725c8474-1eb4-11eb-1424-dd9b7cba518e
@@ -371,6 +390,7 @@ end
 # ╠═1bd240ea-0fef-11eb-293b-c9e8f84b4e06
 # ╠═182f1376-0ff6-11eb-350e-a7265f281d7b
 # ╠═dcf5911a-1043-11eb-0a2e-8778d99f43fb
+# ╠═7ac7dda2-1f4f-11eb-0a96-897e81ea4742
 # ╠═53b315bc-0fe4-11eb-30dc-a3785444134f
 # ╠═53b02da8-1ec0-11eb-3d1d-0d8ee9eeefb4
 # ╠═03a544c0-103c-11eb-2e30-1d6e829715c1

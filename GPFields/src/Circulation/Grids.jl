@@ -52,7 +52,12 @@ end
 """
     BestInteger <: FindIntMethod
 
-Find the value that is closest to an integer, among all values of the cell.
+Find the value that is closest to an integer among values of a cell.
+
+Only half of the cell is considered along each dimension. For instance, if the
+cell has dimensions 8×8, only the lower left corner of dimensions 4×4 is
+considered. This is to avoid single vortices from being identified multiple
+times, by neighbouring cells.
 """
 struct BestInteger <: FindIntMethod end
 
@@ -88,9 +93,12 @@ function find_int(method::DiagonalSearch, cell::AbstractArray; κ = 1)
 end
 
 function find_int(::BestInteger, cell::AbstractArray; κ = 1)
+    Base.require_one_based_indexing(cell)
+    hs = size(cell) .>> 1  # half size of the cell
+    subcell = view(cell, Base.OneTo.(hs)...)
     s = zero(Int)
     err_best = 1.0
-    for v in cell
+    for v in subcell
         Γ = v / κ
         Γ_int = round(Int, Γ)
         err = abs(Γ - Γ_int)
