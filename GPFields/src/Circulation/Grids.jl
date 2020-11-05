@@ -46,7 +46,7 @@ Takes a threshold (should be in ``[0, 0.5]``) as an optional parameter:
 
 """
 @kwdef struct DiagonalSearch <: FindIntMethod
-    int_threshold :: Int = DEFAULT_INT_THRESHOLD
+    int_threshold :: Float64 = DEFAULT_INT_THRESHOLD
 end
 
 """
