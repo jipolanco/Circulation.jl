@@ -30,8 +30,9 @@ struct CirculationGrid{T, Mat <: AbstractMatrix{T}}
 end
 
 function CirculationGrid{T}(init, dims...) where {T}
-    pos = Matrix{T}(init, dims...)
-    neg = Matrix{T}(init, dims...)
+    Mat = T === Bool ? BitArray{2} : Array{T,2}
+    pos = Mat(init, dims...)
+    neg = Mat(init, dims...)
     CirculationGrid(pos, neg)
 end
 
