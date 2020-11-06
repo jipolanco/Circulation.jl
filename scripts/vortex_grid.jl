@@ -51,12 +51,23 @@ function main()
     to = TimerOutput()
     orientations = slice_orientations(gp)
 
-    h5open(output_h5, "w") do ff
-        dsets = init_vortex_datasets(ff, dims)
-        for dir in orientations
-            analyse!(dsets, dir, gp, params; to, max_slices)
+    ff = h5open(output_h5, "w")
+    dsets = init_vortex_datasets(ff, dims)
+
+    # This is executed after analysing each slice in analyse_orientation!.
+    function postprocess(grid, orientation, slice)
+        @timeit to "write HDF5" begin
+            dsets[orientation].positive[slice...] = grid.positive
+            dsets[orientation].negative[slice...] = grid.negative
         end
     end
+
+    for dir in orientations
+        @timeit to "analyse_orientation" analyse_orientation(
+            postprocess, dir, gp, params; to, max_slices)
+    end
+
+    close(ff)
 
     println(to)
 
@@ -81,18 +92,6 @@ function init_vortex_datasets(ff, dims)
             negative = d_create(group, "negative", args...),
         )
     end
-end
-
-function analyse!(dsets, args...; to, kws...)
-    @timeit to "analyse_orientation" analyse_orientation(
-            args...; to, kws...) do grid, i, slice
-        # Note: this is done after analysing each slice.
-        @timeit to "write HDF5" begin
-            dsets[i].positive[slice...] = grid.positive
-            dsets[i].negative[slice...] = grid.negative
-        end
-    end
-    dsets
 end
 
 function analyse_orientation(
