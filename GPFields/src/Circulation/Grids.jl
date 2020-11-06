@@ -7,8 +7,13 @@ module Grids
 
 export CirculationGrid, to_grid, to_grid!
 import Base: @kwdef
+import Base.Threads: @threads
 
 const IntOrBool = Union{Integer, Bool}
+
+# This can save some memory, but will probably cause problems when running with
+# threads.
+const USE_BITARRAY = false
 
 """
     CirculationGrid{T}
@@ -30,7 +35,7 @@ struct CirculationGrid{T, Mat <: AbstractMatrix{T}}
 end
 
 function CirculationGrid{T}(init, dims...) where {T}
-    Mat = T === Bool ? BitArray{2} : Array{T,2}
+    Mat = (USE_BITARRAY && T === Bool) ? BitArray{2} : Array{T,2}
     pos = Mat(init, dims...)
     neg = Mat(init, dims...)
     CirculationGrid(pos, neg)
@@ -193,7 +198,7 @@ function to_grid!(g::CirculationGrid, Γ::AbstractMatrix, steps::Dims,
     T = eltype(g)
     @assert steps .* size(g) == size(Γ)
     fill!(g, zero(T))
-    for I in CartesianIndices(g)
+    @threads for I in CartesianIndices(g)
         cell = make_cell(Γ, I, steps, cell_size)
         grid, val = cell_spin(g, cell, method; kws...)
         if force_unity && val > 1
