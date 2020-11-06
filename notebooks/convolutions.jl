@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.12.6
+# v0.12.7
 
 using Markdown
 using InteractiveUtils
@@ -38,6 +38,15 @@ function besselj1_norm(x)
 	end :: T
 end
 
+# ╔═╡ b3d8987a-11e4-11eb-0992-2770e3477dcc
+let
+	fig, ax = plt.subplots()
+	x = 0:0.1:10
+	ax.plot(x, sinc.(x))
+	ax.plot(x, besselj1_norm.(x))
+	fig
+end
+
 # ╔═╡ 2ff03896-0fec-11eb-2c47-edd0e6364f8c
 md"# Kernels in 2D"
 
@@ -71,42 +80,8 @@ md"# Circulation"
 # ╔═╡ d7ea2b1c-1f67-11eb-10f0-d728a65f971a
 grid_method = Grids.BestInteger()
 
-# ╔═╡ 6087e9f2-1f70-11eb-0bcd-a1d7a7393e53
-md"# Workaround Matplotlib memory issues"
-
-# ╔═╡ 70c43120-1f70-11eb-26d9-ed5a24ac5611
-mutable struct Figure{F}
-	fig :: F
-	function Figure(fig)
-		this = new{typeof(fig)}(fig)
-		finalizer(this) do
-			plt.close(this.fig)
-			this
-		end
-		this
-	end
-end
-
-# ╔═╡ d96ada3c-1f70-11eb-23e1-59ed12ef1275
-function subplots(args...; kwargs...)
-	fig, ax = plt.subplots(args...; kwargs...)
-	Figure(fig), ax
-end
-
-# ╔═╡ f6c0b32c-1f70-11eb-0235-2b379c4d76c7
-fig, ax = subplots()
-
-# ╔═╡ b3d8987a-11e4-11eb-0992-2770e3477dcc
-let
-	fig, ax = plt.subplots()
-	x = 0:0.1:10
-	ax.plot(x, sinc.(x))
-	ax.plot(x, besselj1_norm.(x))
-	fig
-end
-
 # ╔═╡ c22a4a50-1eae-11eb-346c-3b5ccb501a5f
-function plot_circulation_grid!(ax, grid, gp)
+function plot_detected_vortices!(ax, grid, gp)
 	pos, neg = Grids.POSITIVE, Grids.NEGATIVE
 	colours = Dict(pos => "tab:blue", neg => "tab:red")
 	Ns = size(grid[pos])
@@ -117,22 +92,33 @@ function plot_circulation_grid!(ax, grid, gp)
 			val = grid[sign][I]
 			iszero(val) && continue
 			xy_local = map(xy, Tuple(I)) do x, i
-				(3x[i] + x[i + 1]) / 4  # centre of lower left quarter
+				# (x[i] + x[i + 1]) / 2
+				x[i]
 			end
 			markersize = 6 * abs(val)
 			ax.plot(xy_local...; kws..., color = colours[sign], markersize)
 		end
 	end
-	# xygrid = Iterators.product(xy...)
-	# ax.scatter(xygrid; c=grid[pos])
 	ax
 end
 
-# ╔═╡ 0bcd2fb6-1f71-11eb-18e2-05de1a9281ab
-plt.get_fignums()
-
-# ╔═╡ 52e7ca14-1f71-11eb-16a2-511d09723ec4
-finalize(fig)
+# ╔═╡ e9d8781c-1f7e-11eb-139f-f75a8ef5f634
+function plot_grid!(ax, xy, steps; subgrid = false)
+	let kws = (lw = 0.5, c = "0.6")
+		x, y = map((x, dx) -> x[1:dx:end], xy, steps)
+		ax.axhline.(x; kws...)
+		ax.axvline.(y; kws...)
+	end
+	if !subgrid
+		return ax
+	end
+	let kws = (lw = 0.4, c = "0.8")
+		x, y = map((x, dx) -> x[((dx >> 1) + 1):dx:end], xy, steps)
+		ax.axhline.(x; kws...)
+		ax.axvline.(y; kws...)
+	end
+	ax
+end
 
 # ╔═╡ 191c1b62-0fe7-11eb-2a03-0f3402de0f1a
 md"# Setup"
@@ -243,8 +229,11 @@ let
 	fig
 end
 
+# ╔═╡ 2aa86a5c-1fff-11eb-1ec0-55209eccdc17
+benchmarks = true
+
 # ╔═╡ 182f1376-0ff6-11eb-350e-a7265f281d7b
-resampling = 2
+resampling = 1
 
 # ╔═╡ 7ac7dda2-1f4f-11eb-0a96-897e81ea4742
 hostname = Symbol(replace(gethostname(), '.' => '_'))
@@ -282,13 +271,13 @@ end
 
 # ╔═╡ 53b315bc-0fe4-11eb-30dc-a3785444134f
 gp, ψ = load_psi_resolution(
-	Val(1024),
+	Val(256),
 	Val(hostname),
 	resampling,
 );
 
 # ╔═╡ dcf5911a-1043-11eb-0a2e-8778d99f43fb
-loop_size = gp.dx[1] * resampling * 4
+loop_size = gp.dx[1] * resampling * 8
 
 # ╔═╡ e4589a9c-1f57-11eb-264d-014214a80357
 cell_step = round.(Int, loop_size ./ gp.dx)
@@ -312,6 +301,7 @@ end;
 	Γhat = similar(vF[1])
 	plan_inv = plan_irfft(Γhat, Ns[1])
 	kernel = RectangularKernel(r)
+	# kernel = EllipsoidalKernel(r * sqrt(2))
 	gF = DiscreteFourierKernel{Float64}(undef, ks...)
 	materialise!(gF, kernel)
 	Γ = Matrix{Float64}(undef, Ns)
@@ -321,7 +311,8 @@ end;
 end;
 
 # ╔═╡ c23d43da-1e77-11eb-10b2-5553330282c3
-grid = to_grid(Γ, cell_step, grid_method, Int; κ = 1);
+grid = to_grid(Γ, cell_step, grid_method, Int;
+			   κ = 1, cleanup = true, cell_size = (2, 2));
 
 # ╔═╡ e71bacde-1eb1-11eb-2aa3-d3f0fb5fdf61
 md"Positive / negative vortices found: $(sum.(grid))"
@@ -330,28 +321,28 @@ md"Positive / negative vortices found: $(sum.(grid))"
 grid_circulation = grid[Grids.POSITIVE] .- grid[Grids.NEGATIVE];
 
 # ╔═╡ 725c8474-1eb4-11eb-1424-dd9b7cba518e
-let g = similar.(grid)
-	@benchmark to_grid!($g, $Γ, $grid_method)
+if benchmarks
+	let g = similar.(grid)
+		@benchmark to_grid!($g, $Γ, $grid_method)  # 54 μs
+	end
 end
 
 # ╔═╡ 3cf9e6d0-0ff5-11eb-23c0-4d20ff2e03b9
 let
+	plt.close(:all)
 	fig, ax = plt.subplots(dpi = 200)
 	ax.set_aspect(:equal)
-	vmax = 4
+	vmax = 3
 	cf = ax.pcolormesh(xy..., Γ'; vmax, vmin=-vmax,
 		cmap=plt.cm.RdBu, shading=:flat)
+	# cf = ax.pcolormesh(xy..., log10.(abs.(Γ .- round.(Γ))); cmap=plt.cm.Greens, shading=:flat)
 	fig.colorbar(cf; ax, label=L"Γ / κ")
-	xgrid = range(0, 2π, step=loop_size)[1:end-1]
 	ax.contour(xy_in..., ρ', levels=[0.04, ])
 	ax.set_title("r = $(loop_size / π) π — $grid_method")
-	# let kws = (lw = 0.5, c = "0.6")
-	# 	ax.axhline.(xgrid; kws...)
-	# 	ax.axvline.(xgrid; kws...)
-	# end
-	plot_circulation_grid!(ax, grid, gp)
-	# ax.set_xlim(0, π/2)
-	# ax.set_ylim(0, π/2)
+	plot_detected_vortices!(ax, grid, gp)
+	plot_grid!(ax, xy, cell_step)
+	# ax.set_xlim(pi, 2pi)
+	# ax.set_ylim(pi, 2pi)
 	fig
 end
 
@@ -374,7 +365,7 @@ let
 	fig, ax = plt.subplots()
 	ax.set_yscale(:log)
 	M = 4.2
-	bins = range(-M, M, length=400)
+	bins = range(-M, M, length=100)
 	# bins = 400
 	kws = (; bins, density = true)
 	ax.hist(vec(Γ); kws..., label=:convolution)
@@ -414,20 +405,16 @@ end
 # ╠═d7ea2b1c-1f67-11eb-10f0-d728a65f971a
 # ╠═c23d43da-1e77-11eb-10b2-5553330282c3
 # ╠═0491c7c6-1ec1-11eb-2621-19f081b1024f
-# ╠═725c8474-1eb4-11eb-1424-dd9b7cba518e
 # ╠═c22a4a50-1eae-11eb-346c-3b5ccb501a5f
+# ╠═e9d8781c-1f7e-11eb-139f-f75a8ef5f634
 # ╠═3cf9e6d0-0ff5-11eb-23c0-4d20ff2e03b9
 # ╠═d35e2c60-0ff4-11eb-08c5-1f045d375c4f
 # ╠═90dd9228-1043-11eb-3ec4-4f98237703e2
-# ╟─6087e9f2-1f70-11eb-0bcd-a1d7a7393e53
-# ╠═70c43120-1f70-11eb-26d9-ed5a24ac5611
-# ╠═d96ada3c-1f70-11eb-23e1-59ed12ef1275
-# ╠═f6c0b32c-1f70-11eb-0235-2b379c4d76c7
-# ╠═0bcd2fb6-1f71-11eb-18e2-05de1a9281ab
-# ╠═52e7ca14-1f71-11eb-16a2-511d09723ec4
+# ╠═725c8474-1eb4-11eb-1424-dd9b7cba518e
 # ╟─191c1b62-0fe7-11eb-2a03-0f3402de0f1a
 # ╠═6161103a-0fe7-11eb-1186-29294ece4afd
 # ╠═1bd240ea-0fef-11eb-293b-c9e8f84b4e06
+# ╠═2aa86a5c-1fff-11eb-1ec0-55209eccdc17
 # ╠═182f1376-0ff6-11eb-350e-a7265f281d7b
 # ╠═dcf5911a-1043-11eb-0a2e-8778d99f43fb
 # ╠═7ac7dda2-1f4f-11eb-0a96-897e81ea4742

@@ -49,7 +49,7 @@ Takes a threshold (should be in ``[0, 0.5]``) as an optional parameter:
     int_threshold :: Float64 = DEFAULT_INT_THRESHOLD
 end
 
-Base.show(io::IO, d::DiagonalSearch) = print(io, "DiagonalSearch(d.int_threshold)")
+Base.show(io::IO, d::DiagonalSearch) = print(io, "DiagonalSearch(", d.int_threshold, ")")
 
 """
     BestInteger <: FindIntMethod
@@ -103,38 +103,48 @@ function find_int(method::DiagonalSearch, cell::AbstractArray; κ = 1)
             break
         end
     end
-    good, s
+    if !good
+        error("""couldn't find Γ/κ ∈ {-1, 0, 1}.
+              Try increasing the loop size or int_threshold.""")
+    end
+    s
 end
 
 function find_int(::BestInteger, cell::AbstractArray; κ = 1)
     s = zero(Int)
     err_best = Inf
-    for I in CartesianIndices(cell)
-        Γ = cell[I] / κ
-        ω = sum(n -> abs2(n - 1), Tuple(I))  # radial weight
+    for n in eachindex(cell)
+        Γ = cell[n] / κ
         Γ_int = round(Int, Γ)
-        err = abs(Γ - Γ_int) * (1 + ω)
+        err = abs(Γ - Γ_int)
         if err < err_best
             err_best = err :: Float64
             s = Γ_int
         end
     end
-    good = true
-    good, s
+    s
 end
 
 function find_int(::RoundAverage, cell::AbstractArray; κ = 1)
     mean = sum(cell) / (length(cell) * κ)
-    good = true
-    good, round(Int, mean)
+    round(Int, mean)
 end
 
 """
-    to_grid!(g::CirculationGrid, Γ::AbstractMatrix, method = BestInteger(); κ = 1)
+    to_grid!(g::CirculationGrid, Γ::AbstractMatrix, method = BestInteger();
+             κ = 1, cell_size = (2, 2), cleanup = false)
 
 Convert small-scale circulation field to its grid representation.
 
 The `method` argument determines the way integer values of `Γ / κ` are identified.
+
+The `cell_size` optional argument determines the maximum dimensions of a
+subcell, from which the circulation of a grid cell will be determined. For
+instance, if `cell_size = (2, 2)` (the default), 4 neighbouring points in `Γ`
+are taken into account to decide on each value of the grid `g`.
+
+If `cleanup = true`, removes vortices that were possibly identified twice or more.
+See [`cleanup_grid!`](@ref) for details.
 
 See also [`to_grid`](@ref).
 """
@@ -145,26 +155,56 @@ function to_grid!(g::CirculationGrid, Γ::AbstractMatrix,
 end
 
 function to_grid!(g::CirculationGrid{T}, Γ::AbstractMatrix, steps::Dims,
-                  method::FindIntMethod = BestInteger(); kws...) where {T}
+                  method::FindIntMethod = BestInteger();
+                  cleanup = false, cell_size = (2, 2), kws...) where {T}
     gpos = g[POSITIVE]
     gneg = g[NEGATIVE]
     @assert size(gpos) == size(gneg)
     @assert steps .* size(gpos) == size(Γ)
     fill!.(g, zero(T))
     for I in CartesianIndices(gpos)
-        cell = make_cell(Γ, I, steps)
+        cell = make_cell(Γ, I, steps, cell_size)
         sign, val = cell_spin(cell, method; kws...)
         @inbounds g[sign][I] = val
+    end
+    if cleanup
+        cleanup_grid!(g)
     end
     g
 end
 
-function cell_spin(cell::AbstractArray, method; kws...)
-    good, s = find_int(method, cell; kws...)
-    if !good
-        error("""couldn't find Γ/κ ∈ {-1, 0, 1}.
-              Try increasing the loop size or int_threshold.""")
+"""
+    cleanup_grid!(g::AbstractMatrix)
+    cleanup_grid!(g::CirculationGrid)
+
+Remove possible duplicates from grid of positive or negative vortices.
+
+Assumes that two vortices of same sign cannot be direct neighbours.
+"""
+function cleanup_grid!(g::AbstractMatrix)
+    increments = (
+        CartesianIndex(1, 0),
+        CartesianIndex(0, 1),
+        # CartesianIndex(1, 1),
+    )
+    @inbounds for I in CartesianIndices(g)
+        v = g[I]
+        iszero(v) && continue
+        for dI in increments
+            J = I + dI
+            if checkbounds(Bool, g, J) && g[J] == v
+                g[I] = 0  # remove current vortex
+                break
+            end
+        end
     end
+    g
+end
+
+cleanup_grid!(g::CirculationGrid) = map(cleanup_grid!, g)
+
+function cell_spin(cell::AbstractArray, method; kws...)
+    s = find_int(method, cell; kws...)
     if s ≥ 0
         POSITIVE, s
     else
@@ -172,9 +212,9 @@ function cell_spin(cell::AbstractArray, method; kws...)
     end
 end
 
-function make_cell(Γ, I, steps)
-    ranges = map(Tuple(I), steps) do i, δ
-        h = δ >> 1  # half the total step
+function make_cell(Γ, I, steps, cell_size)
+    ranges = map(Tuple(I), steps, cell_size) do i, δ, c
+        h = min(c, δ)  # only consider corner values: (1:2, 1:2)
         j = (i - 1) * δ
         (j + 1):(j + h)
     end
@@ -182,8 +222,8 @@ function make_cell(Γ, I, steps)
 end
 
 """
-    to_grid(Γ::AbstractMatrix, steps, [method = BestInteger()], [::Type{T} = Bool];
-            kws...)
+    to_grid(Γ::AbstractMatrix, steps, [method::FindIntMethod = BestInteger()],
+            [::Type{T} = Bool]; kws...)
 
 Convert small-scale circulation field to its grid representation.
 
@@ -191,15 +231,14 @@ The `steps` represent the integer step size of the grid. For instance, if `steps
 = (8, 8)`, the output grid is 8×8 times coarser than the dimensions of `Γ`.
 
 The algorithm divides `Γ` into cells of size given by `steps` (8×8 cells in the
-example). Only the lower left quarter of each cell (a 4×4 matrix) is considered
-to determine the circulation of that cell. This is to avoid duplicated
-identification of vortices that influence multiple neighbouring cells.
+example). Then, according to the chosen [`FindIntMethod`](@ref), the circulation
+within that cell is given a single integer value.
 
 Ideally, the grid step should be equal to the loop size used to compute the
 circulation. Moreover, if `T` is `Bool`, the loop size must be small enough so
 that circulations are within the set `{0, ±κ}`.
 
-See [`to_grid!`] for possible keyword arguments.
+See [`to_grid!`] for details and for possible keyword arguments.
 """
 function to_grid(Γ::AbstractMatrix, steps::Dims,
                  method::FindIntMethod = BestInteger(),

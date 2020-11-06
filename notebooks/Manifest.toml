@@ -240,15 +240,15 @@ uuid = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
 
 [[Pluto]]
 deps = ["Base64", "Dates", "Distributed", "HTTP", "InteractiveUtils", "Logging", "Markdown", "MsgPack", "Pkg", "REPL", "Sockets", "UUIDs"]
-git-tree-sha1 = "2b1e403cbb3603f50da4c771f792f13396220f26"
+git-tree-sha1 = "872651e9642e78c2d90b0cb13e5d9fec676ad297"
 uuid = "c3e4b0f8-55cb-11ea-2926-15256bba5781"
-version = "0.12.6"
+version = "0.12.7"
 
 [[PlutoUI]]
 deps = ["Base64", "Dates", "Logging", "Markdown", "Random", "Suppressor"]
-git-tree-sha1 = "88315ac9b8d684b5e66377942de3e692a376b9b1"
+git-tree-sha1 = "1b58f5a202953a2ef4dc8623e55fcc55c0f03c33"
 uuid = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
-version = "0.6.8"
+version = "0.6.10"
 
 [[Printf]]
 deps = ["Unicode"]
@@ -267,7 +267,7 @@ uuid = "d330b81b-6aea-500a-939a-2ce795aea3ee"
 version = "2.9.0"
 
 [[REPL]]
-deps = ["InteractiveUtils", "Markdown", "Sockets"]
+deps = ["InteractiveUtils", "Markdown", "Sockets", "Unicode"]
 uuid = "3fa0cd96-eef1-5676-8a61-b3b8758bbffb"
 
 [[Random]]
@@ -321,7 +321,7 @@ uuid = "fd094767-a336-5f1f-9728-57cf17d0bbfb"
 version = "0.2.0"
 
 [[Test]]
-deps = ["Distributed", "InteractiveUtils", "Logging", "Random"]
+deps = ["InteractiveUtils", "Logging", "Random", "Serialization"]
 uuid = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [[UUIDs]]
