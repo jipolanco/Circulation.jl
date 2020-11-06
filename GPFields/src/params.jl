@@ -51,6 +51,7 @@ struct ParamsGP{D}  # D: dimension
 end
 
 Base.size(p::ParamsGP) = p.dims
+Base.size(p::ParamsGP, i) = size(p)[i]
 Base.ndims(::ParamsGP{D}) where {D} = D
 
 function Base.show(io::IO, p::ParamsGP)

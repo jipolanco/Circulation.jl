@@ -5,7 +5,7 @@ Functions for construction of circulation "grids".
 """
 module Grids
 
-export to_grid, to_grid!
+export CirculationGrid, to_grid, to_grid!
 import Base: @kwdef
 
 const IntOrBool = Union{Integer, Bool}
@@ -18,10 +18,36 @@ Circulation of individual vortices on a grid.
 The grid representation is such that positive and negative vortices are split
 into two separate matrices.
 """
-const CirculationGrid{T} = NTuple{2,AbstractMatrix{T}} where {T <: IntOrBool}
+struct CirculationGrid{T, Mat <: AbstractMatrix{T}}
+    positive :: Mat
+    negative :: Mat
+    function CirculationGrid(pos::Mat, neg::Mat) where {Mat}
+        size(pos) == size(neg) ||
+            throw(ArgumentError("matrices must have the same dimensions"))
+        T = eltype(Mat)
+        new{T, Mat}(pos, neg)
+    end
+end
 
-const POSITIVE = 1
-const NEGATIVE = 2
+function CirculationGrid{T}(init, dims...) where {T}
+    pos = Matrix{T}(init, dims...)
+    neg = Matrix{T}(init, dims...)
+    CirculationGrid(pos, neg)
+end
+
+Base.eltype(::Type{<:CirculationGrid{T}}) where {T} = T
+Base.size(g::CirculationGrid) = size(g.positive)
+Base.CartesianIndices(g::CirculationGrid) = CartesianIndices(g.positive)
+
+matrices(g::CirculationGrid) = (g.positive, g.negative)
+
+Base.similar(g::CirculationGrid, etc...) =
+    CirculationGrid(map(x -> similar(x, etc...), matrices(g))...)
+
+function Base.fill!(g::CirculationGrid, x)
+    map(A -> fill!(A, x), matrices(g))
+    g
+end
 
 const DEFAULT_INT_THRESHOLD = 0.05
 
@@ -155,26 +181,24 @@ See also [`to_grid`](@ref).
 """
 function to_grid!(g::CirculationGrid, Γ::AbstractMatrix,
                   method::FindIntMethod = BestInteger(); kws...)
-    steps = size(Γ) .÷ size(g[POSITIVE])
+    steps = size(Γ) .÷ size(g)
     to_grid!(g, Γ, steps, method; kws...)
 end
 
-function to_grid!(g::CirculationGrid{T}, Γ::AbstractMatrix, steps::Dims,
+function to_grid!(g::CirculationGrid, Γ::AbstractMatrix, steps::Dims,
                   method::FindIntMethod = BestInteger();
                   cleanup = false, force_unity = false,
-                  cell_size = (2, 2), kws...) where {T}
-    gpos = g[POSITIVE]
-    gneg = g[NEGATIVE]
-    @assert size(gpos) == size(gneg)
-    @assert steps .* size(gpos) == size(Γ)
-    fill!.(g, zero(T))
-    for I in CartesianIndices(gpos)
+                  cell_size = (2, 2), kws...)
+    T = eltype(g)
+    @assert steps .* size(g) == size(Γ)
+    fill!(g, zero(T))
+    for I in CartesianIndices(g)
         cell = make_cell(Γ, I, steps, cell_size)
-        sign, val = cell_spin(cell, method; kws...)
+        grid, val = cell_spin(g, cell, method; kws...)
         if force_unity && val > 1
             val = one(val)
         end
-        @inbounds g[sign][I] = val
+        @inbounds grid[I] = val
     end
     if cleanup
         cleanup_grid!(g)
@@ -210,14 +234,17 @@ function cleanup_grid!(g::AbstractMatrix)
     g
 end
 
-cleanup_grid!(g::CirculationGrid) = map(cleanup_grid!, g)
+function cleanup_grid!(g::CirculationGrid)
+    map(cleanup_grid!, matrices(g))
+    g
+end
 
-function cell_spin(cell::AbstractArray, method; kws...)
+function cell_spin(g, cell::AbstractArray, method; kws...)
     s = find_int(method, cell; kws...)
     if s ≥ 0
-        POSITIVE, s
+        g.positive, s
     else
-        NEGATIVE, -s
+        g.negative, -s
     end
 end
 
@@ -252,8 +279,7 @@ See [`to_grid!`] for details and for possible keyword arguments.
 function to_grid(Γ::AbstractMatrix, steps::Dims,
                  method::FindIntMethod = BestInteger(),
                  ::Type{T} = Bool; kws...) where {T}
-    gpos = Array{T}(undef, size(Γ) .÷ steps)
-    g = (gpos, similar(gpos))
+    g = CirculationGrid{T}(undef, size(Γ) .÷ steps)
     to_grid!(g, Γ, steps, method; kws...)
 end
 

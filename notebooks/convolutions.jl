@@ -82,21 +82,21 @@ grid_method = Grids.BestInteger()
 
 # ╔═╡ c22a4a50-1eae-11eb-346c-3b5ccb501a5f
 function plot_detected_vortices!(ax, grid, gp)
-	pos, neg = Grids.POSITIVE, Grids.NEGATIVE
+	pos, neg = grid.positive, grid.negative
 	colours = Dict(pos => "tab:blue", neg => "tab:red")
-	Ns = size(grid[pos])
+	Ns = size(grid)
 	xy = map((N, L) -> range(0, L, length = N + 1), Ns, gp.L)
 	kws = (marker = :o, markeredgewidth = 1, alpha = 0.6)
-	for I in CartesianIndices(grid[pos])
-		for sign in (pos, neg)
-			val = grid[sign][I]
+	for I in CartesianIndices(pos)
+		for mat in (pos, neg)
+			val = mat[I]
 			iszero(val) && continue
 			xy_local = map(xy, Tuple(I)) do x, i
 				# (x[i] + x[i + 1]) / 2
 				x[i]
 			end
 			markersize = 6 * abs(val)
-			ax.plot(xy_local...; kws..., color = colours[sign], markersize)
+			ax.plot(xy_local...; kws..., color = colours[mat], markersize)
 		end
 	end
 	ax
@@ -233,7 +233,7 @@ end
 benchmarks = true
 
 # ╔═╡ 182f1376-0ff6-11eb-350e-a7265f281d7b
-resampling = 4
+resampling = 2
 
 # ╔═╡ 7ac7dda2-1f4f-11eb-0a96-897e81ea4742
 hostname = Symbol(replace(gethostname(), '.' => '_'))
@@ -316,15 +316,15 @@ grid = to_grid(Γ, cell_step, grid_method, Bool;
 			   κ = 1, force_unity = true, cleanup = true, cell_size = (2, 2));
 
 # ╔═╡ e71bacde-1eb1-11eb-2aa3-d3f0fb5fdf61
-md"Positive / negative vortices found: $(sum.(grid))"
+md"Positive / negative vortices found: $(sum(grid.positive), sum(grid.negative))"
 
 # ╔═╡ 0491c7c6-1ec1-11eb-2621-19f081b1024f
-grid_circulation = grid[Grids.POSITIVE] .- grid[Grids.NEGATIVE];
+grid_circulation = grid.positive .- grid.negative;
 
 # ╔═╡ 725c8474-1eb4-11eb-1424-dd9b7cba518e
 if benchmarks
-	let g = similar.(grid)
-		@benchmark to_grid!($g, $Γ, $grid_method)  # 54 μs
+	let g = similar(grid)
+		@benchmark to_grid!($g, $Γ, $grid_method; force_unity=true)  # 54 μs
 	end
 end
 
