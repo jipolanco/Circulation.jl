@@ -39,6 +39,13 @@ function main()
     # END OF PARAMETERS
     # ============================================================ #
 
+    @info "Using $(nthreads()) threads"
+    if nthreads() == 1
+        @info "Set the JULIA_NUM_THREADS environment variable to change this."
+    end
+
+    println("Reading data from: $field_names\n\n", gp)
+
     params = (; resampling, field_names)
 
     to = TimerOutput()
