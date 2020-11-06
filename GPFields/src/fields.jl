@@ -99,3 +99,31 @@ function density(ψ::ComplexArray{T}) where {T}
     ρ = similar(ψ, T)
     density!(ρ, ψ) :: RealArray
 end
+
+"""
+    velocity!([f::Function,] vs::NTuple, ps::NTuple, ρ; eps = 0)
+
+Compute velocity field from momentum and density fields.
+
+The velocity and momentum fields may be aliased.
+
+The optional function may be a modifier for the density `ρ`. That is, it
+replaces each value of `ρ` by the output of `f(ρ)`. By default `f` is the
+`identity` function, i.e. it doesn't modify `ρ`. This may be used to compute the
+regularised velocity (if `f = sqrt`). It may also be used to add a small
+increment to the density, to avoid division by zero (e.g. `f = ρ -> ρ + 1e-6`).
+"""
+function velocity!(f::Function,
+                   vs::NTuple{D,<:RealArray},
+                   ps::NTuple{D,<:RealArray},
+                   ρ::RealArray{T,D}) where {T,D}
+    @inbounds @threads for n in eachindex(ρ)
+        one_over_rho = inv(f(ρ[n]))
+        for (v, p) in zip(vs, ps)  # for each velocity component
+            v[n] = one_over_rho * p[n]
+        end
+    end
+    vs
+end
+
+velocity!(vs::NTuple, etc...) = velocity!(identity, vs, etc...)
