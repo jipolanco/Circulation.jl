@@ -13,22 +13,33 @@ using LinearAlgebra: mul!
 using Base.Threads
 
 function main()
+    # ============================================================ #
+    # PARAMETERS
+    # ============================================================ #
+
     # Field parameters
     dims = (256, 256, 256)
     Ls = (2π, 2π, 2π)
     gp = ParamsGP(dims; L = Ls, c = 1.0, nxi = 1.5)
+    resampling = 2
+
+    # Note: the asterisk is expanded to {Rea,Ima}
     field_names = expanduser(
         "~/Work/Shared/data/gGP_samples/tangle/256/fields/*Psi.001.dat"
     )
 
+    # Output HDF5 file
     output_h5 = "vortices.h5"
 
-    params = (;
-        resampling = 2,
-        field_names,
-    )
-
+    # Maximum number of slices to analyse (for testing)
+    # If `nothing`, all possible slices are considered.
     max_slices = nothing
+
+    # ============================================================ #
+    # END OF PARAMETERS
+    # ============================================================ #
+
+    params = (; resampling, field_names)
 
     to = TimerOutput()
     orientations = slice_orientations(gp)
