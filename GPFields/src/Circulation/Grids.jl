@@ -132,7 +132,7 @@ end
 
 """
     to_grid!(g::CirculationGrid, Γ::AbstractMatrix, method = BestInteger();
-             κ = 1, cell_size = (2, 2), cleanup = false)
+             κ = 1, cell_size = (2, 2), force_unity = false, cleanup = false)
 
 Convert small-scale circulation field to its grid representation.
 
@@ -142,6 +142,11 @@ The `cell_size` optional argument determines the maximum dimensions of a
 subcell, from which the circulation of a grid cell will be determined. For
 instance, if `cell_size = (2, 2)` (the default), 4 neighbouring points in `Γ`
 are taken into account to decide on each value of the grid `g`.
+
+If `force_unity = true`, then values of `Γ / κ` in `{-1, 0, 1}` will be
+enforced. For instance, a measured value of 4 will be brought down to 1. This
+probably makes sense when the loop sizes used to compute the circulation are
+very small.
 
 If `cleanup = true`, removes vortices that were possibly identified twice or more.
 See [`cleanup_grid!`](@ref) for details.
@@ -156,7 +161,8 @@ end
 
 function to_grid!(g::CirculationGrid{T}, Γ::AbstractMatrix, steps::Dims,
                   method::FindIntMethod = BestInteger();
-                  cleanup = false, cell_size = (2, 2), kws...) where {T}
+                  cleanup = false, force_unity = false,
+                  cell_size = (2, 2), kws...) where {T}
     gpos = g[POSITIVE]
     gneg = g[NEGATIVE]
     @assert size(gpos) == size(gneg)
@@ -165,6 +171,9 @@ function to_grid!(g::CirculationGrid{T}, Γ::AbstractMatrix, steps::Dims,
     for I in CartesianIndices(gpos)
         cell = make_cell(Γ, I, steps, cell_size)
         sign, val = cell_spin(cell, method; kws...)
+        if force_unity && val > 1
+            val = one(val)
+        end
         @inbounds g[sign][I] = val
     end
     if cleanup

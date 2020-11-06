@@ -233,7 +233,7 @@ end
 benchmarks = true
 
 # ╔═╡ 182f1376-0ff6-11eb-350e-a7265f281d7b
-resampling = 1
+resampling = 4
 
 # ╔═╡ 7ac7dda2-1f4f-11eb-0a96-897e81ea4742
 hostname = Symbol(replace(gethostname(), '.' => '_'))
@@ -271,19 +271,20 @@ end
 
 # ╔═╡ 53b315bc-0fe4-11eb-30dc-a3785444134f
 gp, ψ = load_psi_resolution(
-	Val(256),
+	Val(1024),
 	Val(hostname),
 	resampling,
 );
 
 # ╔═╡ dcf5911a-1043-11eb-0a2e-8778d99f43fb
-loop_size = gp.dx[1] * resampling * 8
+loop_size = gp.dx[1] * resampling * 1
 
 # ╔═╡ e4589a9c-1f57-11eb-264d-014214a80357
 cell_step = round.(Int, loop_size ./ gp.dx)
 
 # ╔═╡ 796b337c-0ff1-11eb-2ba9-97f399308235
 begin
+	plt.close(:all)
 	ρ = GPFields.density(ψ)
 	ps = momentum(ψ, gp)
 	vs = map(p -> p ./ ρ, ps)
@@ -311,8 +312,8 @@ end;
 end;
 
 # ╔═╡ c23d43da-1e77-11eb-10b2-5553330282c3
-grid = to_grid(Γ, cell_step, grid_method, Int;
-			   κ = 1, cleanup = true, cell_size = (2, 2));
+grid = to_grid(Γ, cell_step, grid_method, Bool;
+			   κ = 1, force_unity = true, cleanup = true, cell_size = (2, 2));
 
 # ╔═╡ e71bacde-1eb1-11eb-2aa3-d3f0fb5fdf61
 md"Positive / negative vortices found: $(sum.(grid))"
@@ -330,7 +331,8 @@ end
 # ╔═╡ 3cf9e6d0-0ff5-11eb-23c0-4d20ff2e03b9
 let
 	plt.close(:all)
-	fig, ax = plt.subplots(dpi = 200)
+	fig = plt.figure(dpi = 200)
+	ax = fig.subplots()
 	ax.set_aspect(:equal)
 	vmax = 3
 	cf = ax.pcolormesh(xy..., Γ'; vmax, vmin=-vmax,
@@ -340,9 +342,10 @@ let
 	ax.contour(xy_in..., ρ', levels=[0.04, ])
 	ax.set_title("r = $(loop_size / π) π — $grid_method")
 	plot_detected_vortices!(ax, grid, gp)
-	plot_grid!(ax, xy, cell_step)
-	# ax.set_xlim(pi, 2pi)
-	# ax.set_ylim(pi, 2pi)
+	# plot_grid!(ax, xy, cell_step)
+	ab = (1.5, 2) .* π
+	ax.set_xlim(ab...)
+	ax.set_ylim(ab...)
 	fig
 end
 
@@ -362,6 +365,7 @@ end;
 
 # ╔═╡ d35e2c60-0ff4-11eb-08c5-1f045d375c4f
 let
+	plt.close(:all)
 	fig, ax = plt.subplots()
 	ax.set_yscale(:log)
 	M = 4.2
@@ -381,6 +385,7 @@ extrema(ps[1])
 
 # ╔═╡ 3711a71a-0fe5-11eb-0698-0d3290290f00
 let
+	plt.close(:all)
 	fig, ax = plt.subplots(dpi=100)
 	ax.imshow(ρ')
 	# ax.quiver(ps...)
