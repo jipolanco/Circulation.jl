@@ -36,4 +36,7 @@ include("fields.jl")
 include("Circulation/Circulation.jl")
 @reexport using .Circulation
 
+include("Orientations.jl")
+@reexport using .Orientations
+
 end
