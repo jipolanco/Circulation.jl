@@ -25,7 +25,7 @@ function main()
 
     # Note: the asterisk is expanded to {Rea,Ima}
     field_names = expanduser(
-        "~/Work/Shared/data/gGP_samples/tangle/256/fields/*Psi.001.dat"
+        "~/Work/data/gGP_samples/tangle/256/fields/*Psi.001.dat"
     )
 
     # Output HDF5 file
@@ -50,6 +50,10 @@ function main()
 
     to = TimerOutput()
     orientations = slice_orientations(gp)
+
+    # Warmup
+    analyse_orientation(Orientation(1), gp, params; to, max_slices=1)
+    reset_timer!(to)
 
     ff = h5open(output_h5, "w")
     dsets = init_vortex_datasets(ff, dims)
@@ -93,6 +97,9 @@ function init_vortex_datasets(ff, dims)
         )
     end
 end
+
+analyse_orientation(args...; kws...) =
+    analyse_orientation((stuff...) -> nothing, args...; kws...)
 
 function analyse_orientation(
         postprocess::Function,
