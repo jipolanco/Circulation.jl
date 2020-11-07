@@ -129,7 +129,7 @@ function allocate_fields(::ConvolutionMethod, ::CirculationStats, args...; L, kw
     Γ_hat = similar(Γ, complex(T), Ms)
     FFTW.set_num_threads(nthreads())  # make sure that FFTs are threaded
     g_hat = DiscreteFourierKernel{T}(undef, ks...)
-    plan = plan_rfft(data.ps[1])
+    plan = plan_rfft(data.ps[1], flags=FFTW.MEASURE)
     plan_inv = inv(plan)
     v_hat = map(_ -> similar(Γ_hat), data.ps)
     (; data..., Γ, Γ_hat, ks, plan, plan_inv, g_hat, v_hat)

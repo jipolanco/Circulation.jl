@@ -218,7 +218,7 @@ function allocate_fields(gp_in, gp, ::Type{T} = Float64) where {T}
 
     v_hat = map(_ -> similar(Γ_hat), ps)
     g_hat = DiscreteFourierKernel{T}(undef, ks...)
-    rplan = plan_rfft(Γ)
+    rplan = plan_rfft(Γ; flags=FFTW.MEASURE)
     rplan_inv = inv(rplan)
 
     (;

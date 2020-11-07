@@ -23,7 +23,7 @@ include("integral_field.jl")
 """
     circulation!(
         Γ::AbstractMatrix, vF::ComplexVector, kernel::DiscreteFourierKernel;
-        buf = similar(vF[1]), plan_inv = plan_irfft(buf, size(Γ, 1)),
+        buf = similar(vF[1]), plan_inv = plan_irfft(buf, size(Γ, 1); flags=FFTW.MEASURE),
     )
 
 Compute circulation on a 2D slice from in-plane velocity field in Fourier space.
@@ -44,7 +44,8 @@ convolution kernel.
 function circulation!(
         Γ::AbstractMatrix{<:Real}, vF::ComplexVector{T,2} where T,
         kernel::DiscreteFourierKernel;
-        buf = similar(vF[1]), plan_inv = plan_irfft(buf, size(Γ, 1)),
+        buf = similar(vF[1]),
+        plan_inv = plan_irfft(buf, size(Γ, 1); flags=FFTW.MEASURE),
     )
     ks = Kernels.wavenumbers(kernel)
     gF = Kernels.data(kernel)

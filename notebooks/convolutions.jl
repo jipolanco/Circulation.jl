@@ -288,7 +288,7 @@ begin
 	ρ = GPFields.density(ψ)
 	ps = momentum(ψ, gp)
 	vs = map(p -> p ./ ρ, ps)
-	plan2D = plan_rfft(vs[1])
+	plan2D = plan_rfft(vs[1], flags=FFTW.MEASURE)
 	vF = Ref(plan2D) .* vs
 	xy = coordinates(gp)
 	xy_in = map(x -> x[1:end-1], xy)
@@ -300,7 +300,7 @@ end;
 	r = loop_size
 	Ns = length.(xy) .- 1
 	Γhat = similar(vF[1])
-	plan_inv = plan_irfft(Γhat, Ns[1])
+	plan_inv = plan_irfft(Γhat, Ns[1]; flags=FFTW.MEASURE)
 	kernel = RectangularKernel(r)
 	# kernel = EllipsoidalKernel(r * sqrt(2))
 	gF = DiscreteFourierKernel{Float64}(undef, ks...)
