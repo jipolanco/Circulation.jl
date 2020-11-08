@@ -12,6 +12,8 @@ using LinearAlgebra: mul!
 
 using Base.Threads
 
+const Coordinate{N} = NTuple{N,Int32}
+
 function main()
     # ============================================================ #
     # PARAMETERS
@@ -55,47 +57,70 @@ function main()
     analyse_orientation(Orientation(1), gp, params; to, max_slices=1)
     reset_timer!(to)
 
-    ff = h5open(output_h5, "w")
-    dsets = init_vortex_datasets(ff, dims)
+    N = ndims(gp)
+    coords = (positive = Coordinate{N}[], negative = Coordinate{N}[])
 
     # This is executed after analysing each slice in analyse_orientation!.
-    function postprocess(grid, orientation, slice)
-        @timeit to "write HDF5" begin
-            dsets[orientation].positive[slice...] = grid.positive
-            dsets[orientation].negative[slice...] = grid.negative
+    function postprocess(grid, ::Orientation{dir}, slice) where {dir}
+        @timeit to "to_coordinates!" to_coordinates!(coords, grid, slice)
+    end
+
+    h5open(output_h5, "w") do ff
+        write_params!(ff, gp, params)
+        map(orientations) do dir
+            empty!.(values(coords))
+            @timeit to "analyse_orientation" analyse_orientation(
+                postprocess, dir, gp, params; to, max_slices)
+            @timeit to "write HDF5" to_hdf5!(ff, dir, coords)
         end
     end
-
-    for dir in orientations
-        @timeit to "analyse_orientation" analyse_orientation(
-            postprocess, dir, gp, params; to, max_slices)
-    end
-
-    close(ff)
 
     println(to)
 
     nothing
 end
 
-function init_vortex_datasets(ff, dims)
-    ntuple(Val(3)) do i
-        gname = string("Orientation", "XYZ"[i])
-        group = g_create(ff, gname)
-        # We set a chunk to be the same as a circulation slice.
-        # Writing is faster this way.
-        chunk = ntuple(d -> d == i ? 1 : dims[d], Val(3))
-        args = (
-            datatype(Bool),
-            dataspace(dims...),
-            "chunk", chunk,
-            "compress", 6,
-        )
-        (
-            positive = d_create(group, "positive", args...),
-            negative = d_create(group, "negative", args...),
-        )
+function to_coordinates!(coords, grid, slice)
+    to_coordinates!(coords.positive, grid.positive, slice)
+    to_coordinates!(coords.negative, grid.negative, slice)
+    coords
+end
+
+function to_coordinates!(coords::AbstractVector, grid::AbstractMatrix, slice)
+    @threads for I in CartesianIndices(grid)
+        @inbounds iszero(grid[I]) && continue
+        ijk = GPFields.global_index(Tuple(I), slice)
+        push!(coords, ijk)
     end
+    coords
+end
+
+function write_params!(ff, gp, params)
+    g = g_create(ff, "ParamsGP")
+    g["resolution"] = collect(size(gp))
+    g["box_size"] = collect(box_size(gp))
+    g["dx"] = collect(gp.dx)
+    g["c"] = gp.c
+    g["kappa"] = gp.κ
+    g["xi"] = gp.ξ
+    g["resampling"] = params.resampling
+    g["field_path"] = params.field_names
+    ff
+end
+
+function to_hdf5!(ff, ::Orientation{dir}, coords) where {dir}
+    gname = string("Orientation", "XYZ"[dir])
+    g = g_create(ff, gname)
+    g["positive"] = as_matrix(coords.positive)
+    g["negative"] = as_matrix(coords.negative)
+    ff
+end
+
+function as_matrix(coords::AbstractVector{Coordinate{N}}) where {N}
+    T = eltype(eltype(coords))
+    T <: Integer
+    x = reinterpret(T, coords)
+    reshape(x, N, :)
 end
 
 analyse_orientation(args...; kws...) =
@@ -103,10 +128,10 @@ analyse_orientation(args...; kws...) =
 
 function analyse_orientation(
         postprocess::Function,
-        dir::Orientation{dir_int}, gp_in, params;
+        dir::Orientation, gp_in, params;
         to = TimerOutput(),
         max_slices = nothing,
-    ) where {dir_int}
+    )
     resampling = params.resampling
     gp_slice_in = let slice = make_slice(size(gp_in), dir, 1)
         ParamsGP(gp_in, slice)
@@ -142,7 +167,7 @@ function analyse_orientation(
         slice = make_slice(size(gp_in), dir, s)
         @timeit to "load ψ" load_psi!(ψ_in, gp_in, params.field_names; slice)
         @timeit to "generate grid" generate_grid_slice!(grid, fields, to)
-        @timeit to "postprocess" postprocess(grid, dir_int, slice)
+        @timeit to "postprocess" postprocess(grid, dir, slice)
     end
 
     nothing
