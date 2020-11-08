@@ -2,6 +2,9 @@
 .ipynb_checkpoints
 
 *.vti
+*.vtp
+*.vtm
+
 *.h5
 *.svg
 *.pdf
