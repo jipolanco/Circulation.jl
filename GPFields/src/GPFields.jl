@@ -3,6 +3,7 @@ module GPFields
 export ParamsGP
 export
     coordinates,
+    box_size,
     load_psi,
     load_psi!,
     density,

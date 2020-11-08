@@ -54,6 +54,8 @@ Base.size(p::ParamsGP) = p.dims
 Base.size(p::ParamsGP, i) = size(p)[i]
 Base.ndims(::ParamsGP{D}) where {D} = D
 
+box_size(p::ParamsGP) = p.L
+
 function Base.show(io::IO, p::ParamsGP)
     print(io,
         """
