@@ -87,10 +87,13 @@ function to_coordinates!(coords, grid, slice)
 end
 
 function to_coordinates!(coords::AbstractVector, grid::AbstractMatrix, slice)
+    rlock = ReentrantLock()
     @threads for I in CartesianIndices(grid)
         @inbounds iszero(grid[I]) && continue
         ijk = GPFields.global_index(Tuple(I), slice)
-        push!(coords, ijk)
+        lock(rlock) do
+            push!(coords, ijk)
+        end
     end
     coords
 end
