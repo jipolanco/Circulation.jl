@@ -23,8 +23,7 @@ function to_vtk(ff, outfile)
 end
 
 function main()
-    files = ("vortices_x2.h5", "vortices_x4.h5", "vortices_x8.h5")
-    orientation = 1
+    files = ("vortices_x8.h5", "vortices_x16.h5")
     for fname in files
         outfile = splitext(fname)[1]
         @assert fname != outfile
