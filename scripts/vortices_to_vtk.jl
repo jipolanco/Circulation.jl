@@ -7,6 +7,7 @@ function to_vtk(ff, outfile)
     vtk_multiblock(outfile) do vtm
         dirs = ('X', 'Y', 'Z')
         signs = ("positive", "negative")
+        iter = Iterators.product(dirs, signs)
         map(iter) do it
             dir, sign = it
             dname = "/Orientation$dir/$sign"
