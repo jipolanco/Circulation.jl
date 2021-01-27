@@ -1,7 +1,6 @@
 #!/usr/bin/env julia
 
-import PyPlot
-const plt = PyPlot.plt
+using PyPlot: plt
 using LaTeXStrings
 
 using DelimitedFiles
@@ -29,12 +28,12 @@ get_params() = (
 
 const MOMENTS_FROM_HISTOGRAM = Ref(true)
 
-function read_all_pdfs(g::HDF5Group; bin_centres=true)
-    if exists(g, "hist_filt")
+function read_all_pdfs(g::HDF5.Group; bin_centres=true, normalise=true)
+    if haskey(g, "hist_filt")
         H = g["hist_filt"][:, :] :: Matrix{Float64}
         Γ = g["bin_center_filt"][:] :: Vector{Float64}
         # These circulation values need to be unnormalised...
-        κ = read(file(g)["/ParamsGP/kappa"]) :: Float64
+        κ = read(HDF5.file(g)["/ParamsGP/kappa"]) :: Float64
         @assert bin_centres
         Γ .*= κ
     else
@@ -46,32 +45,46 @@ function read_all_pdfs(g::HDF5Group; bin_centres=true)
             bin_edges
         end
     end
-    H ./= sum(H, dims=1)  # normalise histogram
+    if normalise
+        dΓ = Γ[2] - Γ[1]  # assume uniform distribution
+        Hsum = sum(H, dims=1)
+        H ./= Hsum * dΓ
+    end
     Γ, H
 end
 
-function moment_from_histogram(g::HDF5Group, args...)
-    Γ, H = read_all_pdfs(g)
+function moment_from_histogram(g::HDF5.Group, args...; kws...)
+    Γ, H = read_all_pdfs(g; kws...)
     # n = searchsortedlast(Γ, 0)
     # @show Γ[n]
     moment_from_histogram(H, Γ, args...)
 end
 
-function moment_from_histogram(H::AbstractMatrix, bin_centres, ::Val{p}) where {p}
+function moment_from_histogram(
+        f::Function, H::AbstractMatrix, bin_centres,
+        ::Val{p}) where {p}
     Nb, Nr = size(H)
     @assert length(bin_centres) == Nb
     # @show sum(H, dims=1)
     M = zeros(Nr)
+    dx = bin_centres[2] - bin_centres[1]  # assume uniform distribution
     @inbounds for i = 1:Nb
         x = bin_centres[i]
-        xp = abs(x)^p
+        xp = f(x)^p
         for r = 1:Nr
-            M[r] += xp * H[i, r]
+            M[r] += xp * H[i, r] * dx
         end
     end
     # M ./= vec(sum(H, dims=1))
     M
 end
+
+moment_from_histogram(f::Function, H::AbstractVector, etc...) =
+    moment_from_histogram(f, reshape(H, :, 1), etc...)[1]
+
+# By default, apply absolute value to Γ
+moment_from_histogram(H::AbstractArray, etc...) =
+    moment_from_histogram(abs, H, etc...)
 
 function load_viscosity_NS(dir)
     filename = joinpath(dir, "src", "programmParameter.init")
@@ -115,7 +128,7 @@ function load_energy_NS(dir, timestep)
 end
 
 function read_loop_sizes(g)
-    ff = file(g)
+    ff = HDF5.file(g)
     dx = load_dx(ff)
     # Note: loop sizes are in units of grid steps
     rs = g["loop_sizes"][:]::Vector{Int} .* dx
@@ -127,10 +140,10 @@ function plot_moment!(
     # rs = g["loop_sizes"][:]::Vector{Int} .* dx
     rs = read_loop_sizes(g)
     if MOMENTS_FROM_HISTOGRAM[]
-        gg = g_open(g, "Histogram")
+        gg = open_group(g, "Histogram")
         M = moment_from_histogram(gg, order)
     else
-        gg = g_open(g, "Moments")
+        gg = open_group(g, "Moments")
         p_all = gg["p_abs"][:]::Vector{Int}
         n = searchsortedlast(p_all, p)
         @assert p_all[n] == p
@@ -142,7 +155,7 @@ function plot_moment!(
     let r = rs[1:Nr], M = M[1:Nr]
         A = r.^2
         # To check small-scale prediction in NS: <Γ^2> = <|ω|^2> A^2 / 3 (in 3D)
-        @show filename(g), M[1] / A[1]^p
+        @show HDF5.filename(g), M[1] / A[1]^p
         M ./= norm_Γ^p
         A ./= norm_r^2
         @show A[1] M[1]
@@ -153,14 +166,14 @@ function plot_moment!(
     nothing
 end
 
-load_dx(ff) = let g = g_open(ff, "ParamsGP")
+load_dx(ff) = let g = open_group(ff, "ParamsGP")
     g["L"][1] / g["dims"][1]
 end :: Float64
 
 function plot_moment!(ax, filename::AbstractString, h5field="Velocity"; etc...)
     h5open(filename, "r") do ff
         dx = load_dx(ff)
-        g = g_open(ff, "/Circulation/$h5field")
+        g = open_group(ff, "/Circulation/$h5field")
         plot_moment!(ax, g; dx=dx, etc...)
     end
     ax
@@ -250,26 +263,37 @@ function plot_power_law!(ax, (xmin, xmax), n, α=1, xvar="x";
     ax
 end
 
-function plot_prob_zero_NS!(ax, params)
-    data_file = params.data_ns
-    dir = params.NS_dir
-    ν = load_viscosity_NS(dir)
-    step = parse_timestep_NS(data_file)
+function diagnostics_NS(datafile, simdir)
+    dir = simdir
+    step = parse_timestep_NS(datafile)
     ε = load_dissipation_NS(dir, step)
     E = load_energy_NS(dir, step)
-    Ω = ε / 2ν        # enstrophy
+    ν = load_viscosity_NS(dir)
+    Ω = ε / 2ν  # enstrophy
     @show E Ω ν
-    η = (ν^3 / ε)^(1/4)
-    λ = sqrt(5E / Ω)  # Taylor scale
-    dx = 2π / 1024
-    @show η / dx
+    (
+        η = (ν^3 / ε)^(1/4),
+        λ = sqrt(5E / Ω),  # Taylor scale
+        ν,
+    )
+end
+
+function plot_prob_zero_NS!(ax, params)
+    data_file = params.data_ns
+    η, λ, ν = let L = diagnostics_NS(data_file, params.NS_dir)
+        L.η, L.λ, L.ν
+    end
+    let dx = 2π / 1024
+        @show η / dx
+    end
     @show λ / η
     rs, Γ, H = h5open(data_file, "r") do ff
-        g = g_open(ff, "/Circulation/Velocity/Histogram")
+        g = open_group(ff, "/Circulation/Velocity/Histogram")
         rs = read_loop_sizes(parent(g))
         Γ, H = read_all_pdfs(g, bin_centres=false)  # return bin edges
         @assert length(Γ) == size(H, 1) + 1
         Γ ./= ν
+        H .*= ν
         rs ./= λ
         rs, Γ, H
     end
@@ -283,7 +307,8 @@ function plot_prob_zero_NS!(ax, params)
     @assert Γ[first(ind)] ≈ -Γ[last(ind) + 1]
     Γ_max = Γ[last(ind) + 1]
     Γ_max_round = round(Γ_max, digits=1)
-    prob = @views vec(sum(H[ind, :], dims=1))
+    dΓ = Γ[2] - Γ[1]
+    prob = @views vec(sum(H[ind, :], dims=1)) .* dΓ
     write_prob_zero_NS("prob_zero_NS.txt", rs, prob; Γ_max)
     ax.plot(rs, prob, "o-", color="tab:green",
             label="Classical (\$|Γ| / ν < $Γ_max_round\$)")
@@ -306,11 +331,12 @@ function plot_prob_zero(params)
     ax.set_yscale(:log)
     rs, Γ, H = h5open(params.data_gp, "r") do ff
         κ = read(ff, "/ParamsGP/kappa") :: Float64
-        g = g_open(ff, "/Circulation/Velocity/Histogram")
+        g = open_group(ff, "/Circulation/Velocity/Histogram")
         rs = read_loop_sizes(parent(g))
         rs ./= params.ℓ_gp
         Γ, H = read_all_pdfs(g)
         Γ ./= κ
+        H .*= κ
         rs, Γ, H
     end
     n = searchsortedlast(Γ, 0)
@@ -324,11 +350,114 @@ function plot_prob_zero(params)
     fig
 end
 
+function plot_pdfs_NS(params)
+    fig, ax = plt.subplots(figsize=(4, 2))
+    ax.set_yscale(:log)
+    NS = diagnostics_NS(params.data_ns, params.NS_dir)
+    h5open(params.data_ns, "r") do ff
+        gbase = open_group(ff, "Circulation/Velocity")
+        plot_pdfs_NS!(
+            ax, gbase, NS;
+            xnorm = :rms,
+        )
+    end
+    ax.text(
+        0.97, 0.98, "(c)"; fontsize = :large,
+        ha = :right, va = :top, transform = ax.transAxes,
+    )
+    fig
+end
+
+function plot_pdfs_NS!(ax, gbase, NS; xnorm = nothing, kws...)
+    rs = read_loop_sizes(gbase)
+    Nr = length(rs)
+    # rind = 2:12:round(Int, 0.9 * Nr)
+    λ = NS.λ  # Taylor scale
+    rλ_wanted = (1, 5, 12)
+    rind = map(rλ -> searchsortedlast(rs, rλ * λ), rλ_wanted)
+    ghist = open_group(gbase, "Histogram")
+    Γin, Hin = read_all_pdfs(ghist)
+    @assert all(sum(Hin, dims=1) .* (Γin[2] - Γin[1]) .≈ 1)  # PDFs are normalised
+    Γ = similar(Γin)
+    P = similar(Hin, size(Hin, 1))
+    for n in rind
+        r = rs[n]
+        rλ = round(r / λ, digits=1)  # normalised by Taylor scale
+        copy!(Γ, Γin)
+        copy!(P, view(Hin, :, n))
+        plot_pdf!(ax, Γ, P, NS; xnorm, label = latexstring(rλ), kws...)
+    end
+    ax.legend(
+        title = L"r / λ_{\mathrm{T}}", fontsize = :small, loc = "upper left")
+    if xnorm == :rms
+        ax.set_xlim(-16, 16)
+        ax.set_ylim(1e-7, 0.9)
+        ax.set_xlabel(L"Γ_{\! r} / \left\langle Γ_{\! r}^2 \right\rangle^{1/2}")
+        let x = -10:0.1:10
+            # Pnormal = @. exp(-x^2 / 2) / sqrt(2π)
+            # ax.plot(x, Pnormal; lw=1, ls=:dashed, c="0.4")
+        end
+    end
+    plot_pdf_fit!(ax; xnorm)
+    ax
+end
+
+function plot_pdf!(ax, Γ, P, NS; xnorm, plot_kws...)
+    scale = if xnorm == :ν
+        NS.ν
+    elseif xnorm == :rms
+        # identity: don't apply absolute value to Γ
+        mean1 = moment_from_histogram(identity, P, Γ, Val(1))
+        mean2 = moment_from_histogram(identity, P, Γ, Val(2))
+        # mean3 = moment_from_histogram(identity, P, Γ, Val(3))
+        sqrt(mean2 - mean1^2)
+    else
+        1
+    end
+    Γ ./= scale
+    P .*= scale
+    ax.plot(Γ, P; plot_kws...)
+    ax
+end
+
+function plot_pdf_fit!(ax; xnorm, plot_kws...)
+    # Fit as in Iyer+ 2020 (arXiv)
+    if xnorm == :rms
+        α = 0.8
+        b = 1.2
+        x = 1:0.1:10
+    end
+    p = @. α * exp(-b * x) / sqrt(x)
+    ax.plot(x, p; ls=:dotted, c="0.3", plot_kws...)
+    ax.plot(-x, p; ls=:dotted, c="0.3", plot_kws...)
+    ax
+end
+
+function fig_exponential_tails()
+    fig, ax = plt.subplots(figsize=(3.8, 1.6))
+    ax.set_yscale(:log)
+    ax.set_xlim(-55, 55)
+    ax.set_ylim(1e-7, 2)
+    x = 5:0.5:40
+    α = 1
+    β = 0.8
+    p = @. exp(-α * x^β)
+    kws = (color = "0.3", ls = :dotted)
+    ax.plot(x, p; kws...)
+    ax.plot(-x, p; kws...)
+    fig
+end
+
 function make_plots()
     params = get_params()
+    fig_exponential_tails()
+    let fig = plot_pdfs_NS(params)
+        display(fig)
+    end
+    return
     let fig = plot_moment(params, order=Val(2))
         display(fig)
-        fig.savefig("gamma_variance")
+        # fig.savefig("gamma_variance")
     end
     let fig = plot_prob_zero(params)
         display(fig)
