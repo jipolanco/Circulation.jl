@@ -7,8 +7,7 @@ function to_vtk(ff, outfile)
     vtk_multiblock(outfile) do vtm
         dirs = ('X', 'Y', 'Z')
         signs = ("positive", "negative")
-        iter = Iterators.product(dirs, signs)
-        map(Iterators.product(dirs, signs)) do it
+        map(iter) do it
             dir, sign = it
             dname = "/Orientation$dir/$sign"
             points = ff[dname][:, :] :: Matrix{Int32}
