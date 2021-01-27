@@ -206,12 +206,12 @@ function compute!(
     stats_t
 end
 
-function Base.write(g::Union{HDF5File,HDF5Group}, stats::CirculationStats)
+function Base.write(g::Union{HDF5.File,HDF5.Group}, stats::CirculationStats)
     write_loop_sizes(g, stats.loop_sizes)
     g["resampling_factor"] = stats.resampling_factor
     g["resampled_grid"] = stats.resampled_grid
-    write(g_create(g, "Moments"), stats.moments)
-    write(g_create(g, "Histogram"), stats.histogram)
+    write(create_group(g, "Moments"), stats.moments)
+    write(create_group(g, "Histogram"), stats.histogram)
     g
 end
 

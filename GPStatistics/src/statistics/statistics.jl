@@ -134,16 +134,16 @@ end
 
 """
     write(filename::AbstractString, stats::StatsDict)
-    write(ff::Union{HDF5File,HDF5Group}, stats::StatsDict)
+    write(ff::Union{HDF5.File,HDF5.Group}, stats::StatsDict)
 
 Save statistics to HDF5 file.
 """
 Base.write(h5filename::AbstractString, stats::StatsDict) =
     h5open(ff -> write(ff, stats), h5filename, "w")
 
-function Base.write(ff::Union{HDF5File,HDF5Group}, stats::StatsDict)
+function Base.write(ff::Union{HDF5.File,HDF5.Group}, stats::StatsDict)
     for (k, v) in stats
-        g = g_create(ff, string(k))
+        g = create_group(ff, string(k))
         write(g, v)
         close(g)
     end

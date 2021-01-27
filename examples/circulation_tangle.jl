@@ -119,8 +119,8 @@ function main()
         mkpath(dirname(outfile))
         @info "Saving $(outfile)"
         h5open(outfile, "w") do ff
-            write(g_create(ff, "ParamsGP"), gp)
-            write(g_create(ff, "Circulation"), stats)
+            write(create_group(ff, "ParamsGP"), gp)
+            write(create_group(ff, "Circulation"), stats)
         end
     end
 

@@ -99,7 +99,7 @@ function Base.write(g, s::Histogram)
     # Write compressed histogram (compression ratio can be huge!)
     let Nbins = size(s.H, 1)
         chunks = (Nbins, 1)  # 1 chunk = 1 histogram (single loop size)
-        g["hist", "chunk", chunks, "compress", 6] = s.H
+        g["hist", chunk=chunks, compress=6] = s.H
     end
 
     g

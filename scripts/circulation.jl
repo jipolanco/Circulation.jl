@@ -268,8 +268,8 @@ function main(P::NamedTuple)
         mkpath(dirname(outfile))
         @info "Saving $(outfile)"
         h5open(outfile, "w") do ff
-            write(g_create(ff, "ParamsGP"), params)
-            write(g_create(ff, output_name), stats)
+            write(create_group(ff, "ParamsGP"), params)
+            write(create_group(ff, output_name), stats)
         end
     end
 

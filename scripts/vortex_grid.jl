@@ -99,7 +99,7 @@ function to_coordinates!(coords::AbstractVector, grid::AbstractMatrix, slice)
 end
 
 function write_params!(ff, gp, params)
-    g = g_create(ff, "ParamsGP")
+    g = create_group(ff, "ParamsGP")
     g["resolution"] = collect(size(gp))
     g["box_size"] = collect(box_size(gp))
     g["dx"] = collect(gp.dx)
@@ -113,7 +113,7 @@ end
 
 function to_hdf5!(ff, ::Orientation{dir}, coords) where {dir}
     gname = string("Orientation", "XYZ"[dir])
-    g = g_create(ff, gname)
+    g = create_group(ff, gname)
     g["positive"] = as_matrix(coords.positive)
     g["negative"] = as_matrix(coords.negative)
     ff

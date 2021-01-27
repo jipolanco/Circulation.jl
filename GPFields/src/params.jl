@@ -128,11 +128,11 @@ get_wavenumbers(g::ParamsGP, i::Integer) = get_wavenumbers(fftfreq, g, i)
 get_wavenumbers(g::ParamsGP) = get_wavenumbers(g, Val(:c2c))
 
 """
-    write(g::Union{HDF5File,HDF5Group}, p::ParamsGP)
+    write(g::Union{HDF5.File,HDF5.Group}, p::ParamsGP)
 
 Write GP parameters to HDF5 file.
 """
-function Base.write(g::Union{HDF5File,HDF5Group}, p::ParamsGP)
+function Base.write(g::Union{HDF5.File,HDF5.Group}, p::ParamsGP)
     g["dims"] = collect(p.dims)
     g["L"] = collect(p.L)
     g["c"] = p.c

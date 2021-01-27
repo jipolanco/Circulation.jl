@@ -122,15 +122,15 @@ function velocity_increments!(Γ::AbstractMatrix, v::AbstractMatrix,
     Γ
 end
 
-function Base.write(gbase::Union{HDF5File,HDF5Group}, stats::IncrementStats)
+function Base.write(gbase::Union{HDF5.File,HDF5.Group}, stats::IncrementStats)
     names = ("Longitudinal", "Transverse")
     for (i, name) in enumerate(names)
-        g = g_create(gbase, name)
+        g = create_group(gbase, name)
         g["increments"] = collect(increments(stats))
         g["resampling_factor"] = stats.resampling_factor
         g["resampled_grid"] = stats.resampled_grid
-        write(g_create(g, "Moments"), stats.moments[i])
-        write(g_create(g, "Histogram"), stats.histogram[i])
+        write(create_group(g, "Moments"), stats.moments[i])
+        write(create_group(g, "Histogram"), stats.histogram[i])
     end
     gbase
 end
