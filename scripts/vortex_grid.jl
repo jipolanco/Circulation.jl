@@ -30,8 +30,16 @@ function main()
         "~/Work/data/gGP_samples/tangle/256/fields/*Psi.001.dat"
     )
 
+    # Orientation to analyse (if `nothing`, analyse all orientations).
+    # orientation = nothing
+    orientation = 1  # analyse X slices only
+
     # Output HDF5 file
-    output_h5 = "vortices.h5"
+    output_h5 = if orientation === nothing
+        "vortices.h5"
+    else
+        "vortices_dir$orientation.h5"
+    end
 
     # Maximum number of slices to analyse (for testing)
     # If `nothing`, all possible slices are considered.
@@ -51,7 +59,11 @@ function main()
     params = (; resampling, field_names)
 
     to = TimerOutput()
-    orientations = slice_orientations(gp)
+    orientations = if orientation === nothing
+        slice_orientations(gp)  # autodetect all orientations (in 2D and 3D)
+    else
+        (Orientation(orientation), )
+    end
 
     # Warmup
     analyse_orientation(Orientation(1), gp, params; to, max_slices=1)
