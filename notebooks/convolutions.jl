@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.12.7
+# v0.12.20
 
 using Markdown
 using InteractiveUtils
@@ -81,12 +81,12 @@ md"# Circulation"
 grid_method = Grids.BestInteger()
 
 # ╔═╡ c22a4a50-1eae-11eb-346c-3b5ccb501a5f
-function plot_detected_vortices!(ax, grid, gp)
+function plot_detected_vortices!(ax, grid, gp; xylims = nothing)
 	pos, neg = grid.positive, grid.negative
 	colours = Dict(pos => "tab:blue", neg => "tab:red")
 	Ns = size(grid)
 	xy = map((N, L) -> range(0, L, length = N + 1), Ns, gp.L)
-	kws = (marker = :o, markeredgewidth = 1, alpha = 0.6)
+	kws = (marker = :s, markeredgewidth = 1, alpha = 0.6)
 	for I in CartesianIndices(pos)
 		for mat in (pos, neg)
 			val = mat[I]
@@ -94,6 +94,9 @@ function plot_detected_vortices!(ax, grid, gp)
 			xy_local = map(xy, Tuple(I)) do x, i
 				# (x[i] + x[i + 1]) / 2
 				x[i]
+			end
+			if xylims !== nothing && !all(xylims[1] .≤ xy_local .≤ xylims[2])
+				continue
 			end
 			markersize = 6 * abs(val)
 			ax.plot(xy_local...; kws..., color = colours[mat], markersize)
@@ -118,6 +121,12 @@ function plot_grid!(ax, xy, steps; subgrid = false)
 		ax.axvline.(y; kws...)
 	end
 	ax
+end
+
+# ╔═╡ 389c2466-711a-11eb-2df2-53eb482eba9e
+function index_range(xs, (a, b); remove_end = false)
+	i, j = map(x -> searchsortedlast(xs, x), (a, b))
+	i:(j - remove_end)
 end
 
 # ╔═╡ 191c1b62-0fe7-11eb-2a03-0f3402de0f1a
@@ -233,7 +242,7 @@ end
 benchmarks = true
 
 # ╔═╡ 182f1376-0ff6-11eb-350e-a7265f281d7b
-resampling = 2
+resampling = 4
 
 # ╔═╡ 7ac7dda2-1f4f-11eb-0a96-897e81ea4742
 hostname = Symbol(replace(gethostname(), '.' => '_'))
@@ -277,7 +286,9 @@ gp, ψ = load_psi_resolution(
 );
 
 # ╔═╡ dcf5911a-1043-11eb-0a2e-8778d99f43fb
-loop_size = gp.dx[1] * resampling * 1
+loop_size = 
+	# gp.dx[1] * resampling * 1
+	gp.dx[1] * 2
 
 # ╔═╡ e4589a9c-1f57-11eb-264d-014214a80357
 cell_step = round.(Int, loop_size ./ gp.dx)
@@ -321,31 +332,57 @@ md"Positive / negative vortices found: $(sum(grid.positive), sum(grid.negative))
 # ╔═╡ 0491c7c6-1ec1-11eb-2621-19f081b1024f
 grid_circulation = grid.positive .- grid.negative;
 
-# ╔═╡ 725c8474-1eb4-11eb-1424-dd9b7cba518e
-if benchmarks
-	let g = similar(grid)
-		@benchmark to_grid!($g, $Γ, $grid_method; force_unity=true)  # 54 μs
-	end
+# ╔═╡ d35e2c60-0ff4-11eb-08c5-1f045d375c4f
+let
+	plt.close(:all)
+	fig, ax = plt.subplots()
+	ax.set_yscale(:log)
+	M = 4.2
+	bins = range(-M, M, length=100)
+	# bins = 400
+	kws = (; bins, density = true)
+	ax.hist(vec(Γ); kws..., label=:convolution)
+	# ax.hist(vec(Γ_orig); kws..., alpha=0.5, label=:original)
+	ax.hist(vec(grid_circulation); kws..., alpha=0.4, label=:grid)
+	# ax.axvline.(-3:3, ls=:dotted, color="tab:grey", zorder=-1)
+	ax.legend()
+	fig
 end
 
-# ╔═╡ 3cf9e6d0-0ff5-11eb-23c0-4d20ff2e03b9
+# ╔═╡ c2236452-7119-11eb-28d1-8fd53c040dc4
 let
+	xlim = (1.5, 2) .* π
+	ylim = xlim
+	lims = (xlim, ylim)
+
 	plt.close(:all)
 	fig = plt.figure(dpi = 200)
 	ax = fig.subplots()
 	ax.set_aspect(:equal)
-	vmax = 3
-	cf = ax.pcolormesh(xy..., Γ'; vmax, vmin=-vmax,
-		cmap=plt.cm.RdBu, shading=:flat)
-	# cf = ax.pcolormesh(xy..., log10.(abs.(Γ .- round.(Γ))); cmap=plt.cm.Greens, shading=:flat)
-	fig.colorbar(cf; ax, label=L"Γ / κ")
-	ax.contour(xy_in..., ρ', levels=[0.04, ])
-	ax.set_title("r = $(loop_size / π) π — $grid_method")
-	plot_detected_vortices!(ax, grid, gp)
-	# plot_grid!(ax, xy, cell_step)
-	ab = (1.5, 2) .* π
-	ax.set_xlim(ab...)
-	ax.set_ylim(ab...)
+	
+	let
+		inds = index_range.(xy, lims)
+		inds_cells = map(x -> x[1:end-1], inds)
+		xy_lims = view.(xy, inds)
+		Γ_lims = view(Γ, inds_cells...)
+		vmax = 1
+		cf = ax.pcolormesh(
+			xy_lims..., Γ_lims'; vmax, vmin=-vmax,
+			cmap=plt.cm.RdBu, shading=:flat,
+		)
+		fig.colorbar(cf; ax, label=L"Γ / κ")
+	end
+	
+	let
+		inds = index_range.(xy_in, lims; remove_end=true)
+		xy_lims = view.(xy_in, inds)
+		ρ_lims = view(ρ, inds...)
+		ax.contour(xy_lims..., ρ_lims'; linewidths = 0.5, colors = "0.5", levels=[0.01, ])
+	end
+	
+	xylims = broadcast((f, x) -> f(x), (first, last), lims)
+	plot_detected_vortices!(ax, grid, gp; xylims)
+	
 	fig
 end
 
@@ -362,23 +399,6 @@ end
 	end
 	Γ ./= gp.κ
 end;
-
-# ╔═╡ d35e2c60-0ff4-11eb-08c5-1f045d375c4f
-let
-	plt.close(:all)
-	fig, ax = plt.subplots()
-	ax.set_yscale(:log)
-	M = 4.2
-	bins = range(-M, M, length=100)
-	# bins = 400
-	kws = (; bins, density = true)
-	ax.hist(vec(Γ); kws..., label=:convolution)
-	ax.hist(vec(Γ_orig); kws..., alpha=0.5, label=:original)
-	ax.hist(vec(grid_circulation); kws..., alpha=0.4, label=:grid)
-	# ax.axvline.(-3:3, ls=:dotted, color="tab:grey", zorder=-1)
-	ax.legend()
-	fig
-end
 
 # ╔═╡ 03a544c0-103c-11eb-2e30-1d6e829715c1
 extrema(ps[1])
@@ -412,10 +432,10 @@ end
 # ╠═0491c7c6-1ec1-11eb-2621-19f081b1024f
 # ╠═c22a4a50-1eae-11eb-346c-3b5ccb501a5f
 # ╠═e9d8781c-1f7e-11eb-139f-f75a8ef5f634
-# ╠═3cf9e6d0-0ff5-11eb-23c0-4d20ff2e03b9
+# ╠═c2236452-7119-11eb-28d1-8fd53c040dc4
+# ╠═389c2466-711a-11eb-2df2-53eb482eba9e
 # ╠═d35e2c60-0ff4-11eb-08c5-1f045d375c4f
 # ╠═90dd9228-1043-11eb-3ec4-4f98237703e2
-# ╠═725c8474-1eb4-11eb-1424-dd9b7cba518e
 # ╟─191c1b62-0fe7-11eb-2a03-0f3402de0f1a
 # ╠═6161103a-0fe7-11eb-1186-29294ece4afd
 # ╠═1bd240ea-0fef-11eb-293b-c9e8f84b4e06
