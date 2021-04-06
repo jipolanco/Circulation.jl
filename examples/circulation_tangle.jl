@@ -27,7 +27,7 @@ end
 function main()
     dims = (256, 256, 256)
     gp = ParamsGP(dims, L = (2π, 2π, 2π), c = 1.0, nxi = 1.5)
-    resampling_factor = 2
+    resampling_factor = 4
     with_convolution = true
     compute_in_resampled_grid = false
     loop_sizes = make_loop_sizes(; base = 1.4, dims = dims)

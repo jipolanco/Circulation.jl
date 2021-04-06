@@ -39,7 +39,7 @@ Returns the physical area of a kernel.
 function area end
 
 """
-    EllipsoidalKernel{T}
+    EllipsoidalKernel{T} <: AbstractKernel
 
 Describes a kernel for convolution with ellipsoidal step function on periodic
 domain.
@@ -71,7 +71,7 @@ Construct circular kernel with diameter `D`.
 EllipsoidalKernel(D) = EllipsoidalKernel(D, D)
 
 """
-    RectangularKernel{T}
+    RectangularKernel{T} <: AbstractKernel
 
 Describes a kernel for convolution with 2D rectangular step function on periodic
 domain.
@@ -117,11 +117,13 @@ numbers `(kx, ky)`.
 struct DiscreteFourierKernel{T, WaveNumbers}
     mat :: Array{T,2}
     ks  :: NTuple{2,WaveNumbers}
+    buf :: Vector{T}
     function DiscreteFourierKernel{T}(init, ks...) where {T}
         Ns = length.(ks)
         mat = Array{T}(init, Ns)
+        buf = Vector{T}(undef, 0)
         WaveNumbers = typeof(first(ks))
-        new{T,WaveNumbers}(mat, ks)
+        new{T,WaveNumbers}(mat, ks, buf)
     end
 end
 
@@ -160,11 +162,40 @@ function materialise!(kf::DiscreteFourierKernel, g::RectangularKernel)
     Ls = 2π ./ getindex.(ks, 2)  # domain size: L = 2π / k[2]
     Rs = g.sides ./ Ls
     A = area(g)
+
+    # Write sinc evaluations to buffer
+    sincs, offsets = _eval_sincs!(kf.buf, ks, Rs)
+
+    # NOTE: not sure if threads are worth it here (they can actually slow things
+    # down...)
     @inbounds @threads for I in CartesianIndices(u)
-        kvec = getindex.(ks, Tuple(I))
-        u[I] = A * prod(sinc, kvec .* Rs)  # = A * sinc(kx * rx / Lx) * sinc(ky * ry / Ly)
+        sxy = getindex.(Ref(sincs), Tuple(I) .+ offsets)
+        u[I] = A * prod(sxy)
     end
+
     kf
+end
+
+function _eval_sincs!(buf, ks, Rs)
+    offsets_long = (0, cumsum(length.(ks))...)
+    offsets = ntuple(d -> offsets_long[d], Val(length(ks)))
+    Nk = sum(length, ks)
+    resize!(buf, Nk)
+    @inbounds for i = 1:length(ks)
+        off = offsets[i]
+        kvec = ks[i]
+        v = view(buf, (off + 1):(off + length(kvec)))
+        _eval_sincs_1D!(v, kvec, Rs[i])
+    end
+    buf, offsets
+end
+
+function _eval_sincs_1D!(buf, ks, R)
+    N = length(ks)
+    @inbounds for n = 1:N
+        buf[n] = sinc(ks[n] * R)
+    end
+    buf
 end
 
 function materialise!(kf::DiscreteFourierKernel, g::EllipsoidalKernel)
