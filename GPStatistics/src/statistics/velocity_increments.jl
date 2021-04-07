@@ -16,6 +16,11 @@ struct IncrementStats{Increments,
     histogram  :: H  # tuple (longitudinal, transverse)
 end
 
+function Base.zero(s::IncrementStats)
+    IncrementStats(s.Nr, s.increments, s.resampling_factor, s.resampled_grid,
+                   zero(s.moments), zero(s.histogram))
+end
+
 increments(s::IncrementStats) = s.increments
 statistics(::IncrementStats) = (:moments, :histogram)
 

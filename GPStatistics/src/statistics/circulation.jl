@@ -3,18 +3,33 @@
 using GPFields.Circulation.Kernels: AbstractKernel
 using LinearAlgebra: mul!
 
+abstract type AbstractConditioning end
+struct NoConditioning <: AbstractConditioning end
+struct ConditionOnDissipation <: AbstractConditioning end
+
 """
-    CirculationStats{T} <: AbstractFlowStats
+    CirculationStats <: AbstractFlowStats
 
 Circulation statistics, including moments and histograms.
 """
-struct CirculationStats{Loops, M<:Moments, H<:Histogram} <: AbstractFlowStats
-    Nr         :: Int    # number of loop sizes
-    loop_sizes :: Loops  # vector of length Nr (can be integers or convolution kernels)
+struct CirculationStats{
+        Loops,
+        M <: Moments,
+        H <: Histogram,
+        Conditioning <: AbstractConditioning,
+    } <: AbstractFlowStats
+    conditioning :: Conditioning
+    Nr          :: Int    # number of loop sizes
+    loop_sizes  :: Loops  # vector of length Nr (can be integers or convolution kernels)
     resampling_factor :: Int
     resampled_grid :: Bool
     moments    :: M
     histogram  :: H
+end
+
+function Base.zero(s::CirculationStats)
+    CirculationStats(s.conditioning, s.Nr, s.loop_sizes, s.resampling_factor,
+                     s.resampled_grid, zero(s.moments), zero(s.histogram))
 end
 
 @inline sampling_method(::Type{CirculationStats}, ::Type{<:Integer}) = PhysicalMethod()
@@ -27,7 +42,7 @@ statistics(::CirculationStats) = (:moments, :histogram)
 
 """
     CirculationStats(
-        loop_sizes;
+        loop_sizes_or_kernels, [conditioning = NoConditioning()];
         histogram::ParamsHistogram,
         moments::ParamsMoments,
         resampling_factor = 1,
@@ -38,7 +53,12 @@ Construct and initialise statistics.
 
 # Parameters
 
-- `loop_sizes`: sizes of square circulation loops in grid step units.
+- `loop_sizes_or_kernels`: sizes of square circulation loops in grid step units.
+
+  It may also be an array of convolution kernels (subtypes of `AbstractKernel`).
+  All kernels must be of the same type (e.g. `RectangularKernel`). They will
+  typically differ on their characteristic lengthscale (e.g. the size of a
+  rectangular kernel).
 
 - `resampling_factor`: if greater than one, the loaded ψ fields are resampled
   into a finer grid using padding in Fourier space.
@@ -51,7 +71,8 @@ Construct and initialise statistics.
   This takes more time but may lead to better statistics.
 """
 function CirculationStats(
-        loop_sizes;
+        loop_sizes::AbstractArray{T} where {T <: Union{Real, AbstractKernel}},
+        conditioning = NoConditioning();
         moments::ParamsMoments,
         histogram::ParamsHistogram,
         resampling_factor=1,
@@ -61,43 +82,7 @@ function CirculationStats(
     Nr = length(loop_sizes)
     M = Moments(moments, Nr, Float64)
     H = Histogram(histogram, Nr, Int)
-    CirculationStats(Nr, loop_sizes, resampling_factor,
-                     compute_in_resampled_grid, M, H)
-end
-
-# TODO merge both variants
-"""
-    CirculationStats(
-        kernels :: AbstractArray{<:Kernels.AbstractKernel};
-        histogram, moments,
-        resampling_factor = 1,
-    )
-
-Construct and initialise statistics.
-
-# Parameters
-
-- `kernels`: list of convolution kernels. All kernels must be of the same type
-  (e.g. `RectangularKernel`). They will typically differ on their characteristic
-  lengthscale (e.g. the size of a rectangular kernel).
-
-- `resampling_factor`: if greater than one, the loaded ψ fields are resampled
-  into a finer grid using padding in Fourier space.
-  The number of grid points is increased by a factor `resampling_factor` in
-  every direction.
-
-"""
-function CirculationStats(
-        kernels :: AbstractArray{<:AbstractKernel};
-        histogram, moments,
-        resampling_factor = 1,
-        compute_in_resampled_grid = false,
-    )
-    resampling_factor >= 1 || error("resampling_factor must be positive")
-    Nr = length(kernels)
-    M = Moments(moments, Nr, Float64)
-    H = Histogram(histogram, Nr, Int)
-    CirculationStats(Nr, kernels, resampling_factor,
+    CirculationStats(conditioning, Nr, loop_sizes, resampling_factor,
                      compute_in_resampled_grid, M, H)
 end
 
