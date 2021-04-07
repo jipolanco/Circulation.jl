@@ -34,7 +34,7 @@ function main()
     kernels = with_convolution ? RectangularKernel.(loop_sizes .* gp.dx[1]) : loop_sizes
 
     fields = (
-        data_dir = expanduser("~/Work/Shared/data/gGP_samples/tangle/256/fields"),
+        data_dir = expanduser("~/Data/GP/gGP_samples/tangle/256/fields"),
         data_idx = 1,
         load_velocity = false,
     )

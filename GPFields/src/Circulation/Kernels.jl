@@ -166,9 +166,7 @@ function materialise!(kf::DiscreteFourierKernel, g::RectangularKernel)
     # Write sinc evaluations to buffer
     sincs, offsets = _eval_sincs!(kf.buf, ks, Rs)
 
-    # NOTE: not sure if threads are worth it here (they can actually slow things
-    # down...)
-    @inbounds @threads for I in CartesianIndices(u)
+    @inbounds for I in CartesianIndices(u)
         sxy = getindex.(Ref(sincs), Tuple(I) .+ offsets)
         u[I] = A * prod(sxy)
     end
