@@ -6,6 +6,7 @@ export
     box_size,
     load_psi,
     load_psi!,
+    load_scalar_field!,
     density,
     momentum,
     density!,

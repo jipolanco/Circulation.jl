@@ -17,6 +17,8 @@ abstract type AbstractFlowStats end
 include("circulation.jl")
 include("velocity_increments.jl")
 
+conditioning(s::AbstractFlowStats) = s.conditioning
+
 # Dictionary of statistics.
 # Useful for defining flow statistics related to quantities such as velocity,
 # regularised velocity and momentum.
@@ -24,10 +26,6 @@ const StatsDict{S} =
     Dict{VelocityLikeFields.VelocityLikeField, S} where {S <: AbstractFlowStats}
 
 Broadcast.broadcastable(s::AbstractBaseStats) = Ref(s)
-
-Base.zero(s::S) where {S <: AbstractFlowStats} =
-    S(s.Nr, s.loop_sizes, s.resampling_factor, s.resampled_grid,
-      zero(s.moments), zero(s.histogram))
 
 Base.zero(s::SD) where {SD <: StatsDict} = SD(k => zero(v) for (k, v) in s)
 

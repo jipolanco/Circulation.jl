@@ -86,16 +86,23 @@ function CirculationStats(
                      compute_in_resampled_grid, M, H)
 end
 
-function allocate_fields(::PhysicalMethod, ::CirculationStats, args...; L, kwargs...)
+_allocate_fields(::AbstractConditioning, ρ) = (;)
+_allocate_fields(::ConditionOnDissipation, ρ) = (; ε = similar(ρ))
+
+function allocate_fields(::PhysicalMethod, s::CirculationStats, args...; L, kwargs...)
     data = allocate_common_fields(args...; kwargs...)
+    Γ = similar(data.ρ, data.dims_out)
     (;
         data...,
-        Γ = similar(data.ρ, data.dims_out),
+        Γ,
+        _allocate_fields(conditioning(s), Γ)...,
         I = IntegralField2D(data.ps[1], L=L),
     )
 end
 
-function allocate_fields(::ConvolutionMethod, ::CirculationStats, args...; L, kwargs...)
+function allocate_fields(
+        ::ConvolutionMethod, s::CirculationStats, args...; L, kwargs...,
+    )
     # Note that Γ is always computed in the resampled grid.
     # This overrides a possible `compute_in_resampled_grid` in kwargs, which
     # only applies to computation of final statistics (histograms, ...).
@@ -111,7 +118,11 @@ function allocate_fields(::ConvolutionMethod, ::CirculationStats, args...; L, kw
     plan = plan_rfft(data.ps[1], flags=FFTW.MEASURE)
     plan_inv = inv(plan)
     v_hat = map(_ -> similar(Γ_hat), data.ps)
-    (; data..., Γ, Γ_hat, ks, plan, plan_inv, g_hat, v_hat)
+    (;
+        data..., Γ,
+        _allocate_fields(conditioning(s), Γ)...,
+        Γ_hat, ks, plan, plan_inv, g_hat, v_hat,
+    )
 end
 
 allocate_fields(s::CirculationStats, args...; kwargs...) =
@@ -163,18 +174,6 @@ function compute!(
                     axes(Γ))...)
     end
 
-    # NOTE: this implementation is not optimal, because computing the kernel
-    # (with materialise!) is quite expensive. Some possible solutions are:
-    #
-    #  1. precompute all kernels just once. This would require a lot of memory,
-    #     and may only be doable with MPI.
-    #
-    #  2. reorder loops: iterate first over the different kernels, then over
-    #     slices of 3D domain. This will possibly require a lot of repetitive I/O.
-    #
-    #  3. only compute circulation for small loops, and then aggregate the
-    #     results. This makes more sense for square kernels.
-    #
     for (r_ind, kernel) in enumerate(st1.loop_sizes)
         @timeit to "kernel!" materialise!(g_hat, kernel)
         @timeit to "circulation!" circulation!(

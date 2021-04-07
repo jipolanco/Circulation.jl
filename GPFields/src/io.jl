@@ -203,15 +203,23 @@ function load_velocity!(vs::RealVector{T,N}, gp::ParamsGP{M},
 
     components = dims_slice(Val(M), slice)
     @assert length(components) == N
+
     for (v, c) in zip(vs, components)
-        fname = string(prefix, "xyz"[c], suffix)
-        isfile(fname) || error("file not found: $fname")
-        check_size(T, gp.dims, fname)
-        vmap = Mmap.mmap(fname, Array{T,M}, gp.dims)
-        load_slice!(v, vmap, slice)
+        filename = string(prefix, "xyz"[c], suffix)
+        load_scalar_field!(v, gp; filename, slice)
     end
 
     vs
+end
+
+function load_scalar_field!(
+        u::AbstractArray{T}, gp::ParamsGP{M};
+        filename::AbstractString, slice = nothing,
+    ) where {T,M}
+    isfile(filename) || error("file not found: $filename")
+    check_size(T, gp.dims, filename)
+    vmap = Mmap.mmap(filename, Array{T,M}, gp.dims)
+    load_slice!(u, vmap, slice)
 end
 
 # Example: dims_slice(Val(3), (:, 42, :)) = (1, 3).
