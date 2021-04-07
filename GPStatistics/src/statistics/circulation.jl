@@ -191,7 +191,7 @@ function compute!(
     if with_dissipation
         @timeit to "FFT(ε)" mul!(fields.ε_hat, fields.plan, fields.ε)
         ε_coarse = fields.ε_coarse
-        Γ_stats = (Γ, ε_coarse)
+        Γ_stats = (; Γ, ε = ε_coarse)
     else
         resampling = st1.resampling_factor
         Γ_stats = if resampling == 1 || st1.resampled_grid

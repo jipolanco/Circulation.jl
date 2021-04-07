@@ -95,8 +95,8 @@ exponents(frac::Val{true}, s::Moments) =
     (; frac = (1:s.Nm_frac) ./ (s.Nm_frac + 1))
 
 Base.eltype(::Type{<:Moments{T}}) where {T} = T
-Base.zero(s::Moments) = Moments(s.Nm, s.Nr, eltype(s),
-                                Nfrac=_get_Nfrac_kwarg(s))
+Base.zero(s::Moments) =
+    Moments(s.Nm, s.Nr, eltype(s), Nfrac=_get_Nfrac_kwarg(s))
 
 function update!(::NoConditioning, s::Moments, Γ, r)
     @assert 1 <= r <= s.Nr
@@ -143,6 +143,15 @@ function update!(::NoConditioning, s::Moments, Γ, r)
     end
 
     s
+end
+
+function update!(
+        cond::ConditionOnDissipation, s::Moments,
+        fields, r,
+    )
+    Γ = fields.Γ
+    ε = fields.ε
+    # TODO continue...
 end
 
 function reduce!(s::Moments, v)

@@ -68,6 +68,15 @@ function update!(::NoConditioning, s::Histogram, Γ, r)
     s
 end
 
+function update!(
+        cond::ConditionOnDissipation, s::Histogram,
+        fields, r,
+    )
+    Γ = fields.Γ
+    ε = fields.ε
+    # TODO continue...
+end
+
 function reduce!(s::Histogram, v)
     for src in v
         @assert s.Nr == src.Nr

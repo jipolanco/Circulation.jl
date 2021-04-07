@@ -77,20 +77,21 @@ end
 function update!(cond::ConditionOnDissipation,
                  stats::AbstractVector{<:AbstractFlowStats},
                  fields, r_ind; to=TimerOutput())
-    Γ, ε = fields  # circulation and coarse-grained dissipation (with the same kernel)
-    # TODO update this...
     Nth = nthreads()
     @assert length(stats) == Nth
-    N = length(Γ)
-    # Split Γ field among threads.
-    Γ_v = vec(Γ)
+    N = length(first(fields))
+    @assert all(length.(values(fields)) .== N)
+    # Split fields among threads.
+    fields_v = map(vec, fields)
     Γ_inds = collect(Iterators.partition(1:N, div(N, Nth, RoundUp)))
     @assert length(Γ_inds) == Nth
     @threads for t = 1:Nth
         timer = t == 1 ? to : TimerOutput()
         s = stats[t]
-        Γ_t = view(Γ_v, Γ_inds[t])
-        update!(cond, s, Γ_t, r_ind; to=timer)
+        fields_t = map(fields_v) do u
+            view(u, Γ_inds[t])
+        end
+        update!(cond, s, fields_t, r_ind; to=timer)
     end
     stats
 end
