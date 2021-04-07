@@ -1,7 +1,7 @@
 module Circulation
 
 export IntegralField2D, Rectangle
-export prepare!, circulation, circulation!
+export prepare!, circulation, circulation!, convolve!
 
 using ..GPFields
 import GPFields: ComplexVector
@@ -19,6 +19,8 @@ include("Grids.jl")
 
 include("rectangle.jl")
 include("integral_field.jl")
+
+include("convolutions.jl")
 
 """
     circulation!(
@@ -50,18 +52,7 @@ function circulation!(
     ks = Kernels.wavenumbers(kernel)
     gF = Kernels.data(kernel)
     Γ_hat = buf
-    if size(vF[1]) != length.(ks)
-        throw(DimensionMismatch("kernel wave numbers incompatible with size of `vF` arrays"))
-    end
-    if size(vF[1]) != size(gF)
-        throw(DimensionMismatch("incompatible size of kernel array"))
-    end
-    if size(vF[1]) != size(buf)
-        throw(DimensionMismatch("incompatible size of buffer array"))
-    end
-    if ((size(Γ, 1) >> 1) + 1, size(Γ, 2)) != size(gF)
-        throw(DimensionMismatch("incompatible size of output array"))
-    end
+    check_convolution(Γ, Γ_hat, vF[1], gF, ks)
     @inbounds @threads for I in CartesianIndices(gF)
         kvec = getindex.(ks, Tuple(I))
         ω = im * (kvec[1] * vF[2][I] - kvec[2] * vF[1][I])

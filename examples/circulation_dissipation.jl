@@ -33,21 +33,25 @@ function main()
         statistics = "tgtest_circulation.h5",
     )
 
+    circulation_bins = range(-50, 50; step = 0.1)
+    dissipation_bins = range(0, 50; step = 0.1)
+
     circulation = (
         max_slices = 4,
         moments = ParamsMoments(integer = 10, fractional = nothing),
-        histogram = ParamsHistogram(bin_edges = range(-50, 50; length = 10_000))
+        histogram = ParamsHistogram(bin_edges = circulation_bins)
     )
 
     # ============================================================ #
 
     convolution_kernels = RectangularKernel.(loop_sizes .* gp.dx[1])
+    conditioning = ConditionOnDissipation(dissipation_bins)
 
     @info "Loop sizes: $loop_sizes ($(length(loop_sizes)) sizes)"
 
     to = TimerOutput()
     stats = init_statistics(
-        CirculationStats, convolution_kernels, ConditionOnDissipation();
+        CirculationStats, convolution_kernels, conditioning;
         which = (VelocityLikeFields.Velocity, ),
         histogram = circulation.histogram,
         moments = circulation.moments,

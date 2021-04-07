@@ -41,7 +41,7 @@ Histogram(p::ParamsHistogram, etc...) = Histogram(p.bin_edges, etc...)
 Base.eltype(::Type{<:Histogram{T}}) where {T} = T
 Base.zero(s::Histogram) = Histogram(s.bin_edges, s.Nr, eltype(s))
 
-function update!(s::Histogram, Γ, r)
+function update!(::NoConditioning, s::Histogram, Γ, r)
     @assert 1 <= r <= s.Nr
 
     s.Nsamples[r] += length(Γ)

@@ -5,6 +5,13 @@ end
 
 using .VelocityLikeFields
 
+export NoConditioning, ConditionOnDissipation
+abstract type AbstractConditioning end
+struct NoConditioning <: AbstractConditioning end
+struct ConditionOnDissipation{Edges <: AbstractVector} <: AbstractConditioning
+    bin_edges :: Edges  # defines the binning of dissipation
+end
+
 abstract type AbstractSamplingMethod end
 struct ConvolutionMethod <: AbstractSamplingMethod end
 struct PhysicalMethod <: AbstractSamplingMethod end
@@ -32,7 +39,7 @@ Base.zero(s::SD) where {SD <: StatsDict} = SD(k => zero(v) for (k, v) in s)
 Base.zero(s::Tuple{Vararg{S}}) where {S <: AbstractBaseStats} = zero.(s)
 
 """
-    update!(stats::AbstractFlowStats, Γ, r_ind; to=TimerOutput())
+    update!(conditioning, stats::AbstractFlowStats, Γ, r_ind; to=TimerOutput())
 
 Update circulation data associated to a given loop size (with index `r_ind`)
 using circulation data.
@@ -40,16 +47,17 @@ using circulation data.
 For threaded computation, `stats` should be a vector of `AbstractFlowStats`,
 with length equal to the number of threads.
 """
-function update!(stats::AbstractFlowStats, Γ, r_ind; to=TimerOutput())
+function update!(cond, stats::AbstractFlowStats, Γ, r_ind; to=TimerOutput())
     @assert r_ind ∈ 1:stats.Nr
     for name in statistics(stats)
-        @timeit to string(name) update!(getfield(stats, name), Γ, r_ind)
+        @timeit to string(name) update!(cond, getfield(stats, name), Γ, r_ind)
     end
     stats
 end
 
-function update!(stats::AbstractVector{<:AbstractFlowStats}, Γ, r_ind;
-                 to=TimerOutput())
+function update!(cond::NoConditioning,
+                 stats::AbstractVector{<:AbstractFlowStats},
+                 Γ, r_ind; to=TimerOutput())
     Nth = nthreads()
     @assert length(stats) == Nth
     N = length(Γ)
@@ -61,12 +69,34 @@ function update!(stats::AbstractVector{<:AbstractFlowStats}, Γ, r_ind;
         timer = t == 1 ? to : TimerOutput()
         s = stats[t]
         Γ_t = view(Γ_v, Γ_inds[t])
-        update!(s, Γ_t, r_ind; to=timer)
+        update!(cond, s, Γ_t, r_ind; to=timer)
     end
     stats
 end
 
-update!(s::Tuple, Γ::Tuple, args...) = map((a, b) -> update!(a, b, args...), s, Γ)
+function update!(cond::ConditionOnDissipation,
+                 stats::AbstractVector{<:AbstractFlowStats},
+                 fields, r_ind; to=TimerOutput())
+    Γ, ε = fields  # circulation and coarse-grained dissipation (with the same kernel)
+    # TODO update this...
+    Nth = nthreads()
+    @assert length(stats) == Nth
+    N = length(Γ)
+    # Split Γ field among threads.
+    Γ_v = vec(Γ)
+    Γ_inds = collect(Iterators.partition(1:N, div(N, Nth, RoundUp)))
+    @assert length(Γ_inds) == Nth
+    @threads for t = 1:Nth
+        timer = t == 1 ? to : TimerOutput()
+        s = stats[t]
+        Γ_t = view(Γ_v, Γ_inds[t])
+        update!(cond, s, Γ_t, r_ind; to=timer)
+    end
+    stats
+end
+
+update!(cond, s::Tuple, Γ::Tuple, args...) =
+    map((a, b) -> update!(cond, a, b, args...), s, Γ)
 
 """
     reduce!(stats::AbstractFlowStats, v::AbstractVector{<:AbstractFlowStats})

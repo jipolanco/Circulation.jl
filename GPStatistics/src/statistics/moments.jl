@@ -98,7 +98,7 @@ Base.eltype(::Type{<:Moments{T}}) where {T} = T
 Base.zero(s::Moments) = Moments(s.Nm, s.Nr, eltype(s),
                                 Nfrac=_get_Nfrac_kwarg(s))
 
-function update!(s::Moments, Γ, r)
+function update!(::NoConditioning, s::Moments, Γ, r)
     @assert 1 <= r <= s.Nr
 
     s.Nsamples[r] += length(Γ)

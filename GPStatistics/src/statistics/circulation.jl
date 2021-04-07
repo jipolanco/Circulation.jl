@@ -1,13 +1,7 @@
 # Circulation-specific statistics.
 
-export NoConditioning, ConditionOnDissipation
-
 using GPFields.Circulation.Kernels: AbstractKernel
 using LinearAlgebra: mul!
-
-abstract type AbstractConditioning end
-struct NoConditioning <: AbstractConditioning end
-struct ConditionOnDissipation <: AbstractConditioning end
 
 """
     CirculationStats <: AbstractFlowStats
@@ -88,8 +82,23 @@ function CirculationStats(
                      compute_in_resampled_grid, M, H)
 end
 
-_allocate_fields(::AbstractConditioning, ρ) = (;)
-_allocate_fields(::ConditionOnDissipation, ρ) = (; ε = similar(ρ))
+_allocate_fields(::AbstractConditioning, etc...) = (;)
+
+function _allocate_fields(::ConditionOnDissipation, ρ, ρ_hat)
+    ε = similar(ρ)
+    (;
+        ε,  # loaded from file
+
+        ε_hat = similar(ρ_hat),
+
+        # Coarse-grained dissipation at a given scale (i.e. convoluted with a
+        # specific kernel).
+        # NOTE: it is *aliased* to the original dissipation ε. That's ok,
+        # because we don't need the original dissipation once its FFT has been
+        # computed.
+        ε_coarse = ε,
+    )
+end
 
 function allocate_fields(::PhysicalMethod, s::CirculationStats, args...; L, kwargs...)
     data = allocate_common_fields(args...; kwargs...)
@@ -122,7 +131,7 @@ function allocate_fields(
     v_hat = map(_ -> similar(Γ_hat), data.ps)
     (;
         data..., Γ,
-        _allocate_fields(conditioning(s), Γ)...,
+        _allocate_fields(conditioning(s), Γ, Γ_hat)...,
         Γ_hat, ks, plan, plan_inv, g_hat, v_hat,
     )
 end
@@ -143,6 +152,14 @@ function compute!(
     @timeit to "prepare!" prepare!(Ip, vs)
 
     st1 = first(stats_t)
+
+    with_dissipation = conditioning(st1) isa ConditionOnDissipation
+    if with_dissipation
+        throw(ArgumentError(
+            "dissipation conditioning must be done with convolution method"
+        ))
+    end
+
     resampling = st1.resampling_factor
     grid_step = st1.resampled_grid ? 1 : resampling
     @assert grid_step .* size(Γ) == size(vs[1]) "incorrect dimensions of Γ"
@@ -168,19 +185,36 @@ function compute!(
     @assert size(Γ) == size(vs[1]) "incorrect dimensions of Γ"
 
     st1 = first(stats_t)
-    resampling = st1.resampling_factor
-    Γ_stats = if st1.resampled_grid
-        Γ
+    cond = conditioning(st1)
+    with_dissipation = cond isa ConditionOnDissipation
+
+    if with_dissipation
+        @timeit to "FFT(ε)" mul!(fields.ε_hat, fields.plan, fields.ε)
+        ε_coarse = fields.ε_coarse
+        Γ_stats = (Γ, ε_coarse)
     else
-        view(Γ, map(ax -> range(first(ax), last(ax), step=resampling),
-                    axes(Γ))...)
+        resampling = st1.resampling_factor
+        Γ_stats = if resampling == 1 || st1.resampled_grid
+            Γ
+        else
+            view(Γ, map(ax -> range(first(ax), last(ax), step=resampling),
+                        axes(Γ))...)
+        end
     end
 
     for (r_ind, kernel) in enumerate(st1.loop_sizes)
         @timeit to "kernel!" materialise!(g_hat, kernel)
         @timeit to "circulation!" circulation!(
-            Γ, v_hat, g_hat; buf = fields.Γ_hat, plan_inv = fields.plan_inv)
-        @timeit to "statistics" update!(stats_t, Γ_stats, r_ind; to=to)
+            Γ, v_hat, g_hat;
+            buf = fields.Γ_hat, plan_inv = fields.plan_inv,
+        )
+        if with_dissipation
+            @timeit to "convolve dissipation" convolve!(
+                ε_coarse, fields.ε_hat, g_hat;
+                buf = fields.Γ_hat, plan_inv = fields.plan_inv,
+            )
+        end
+        @timeit to "statistics" update!(cond, stats_t, Γ_stats, r_ind; to=to)
     end
 
     stats_t
