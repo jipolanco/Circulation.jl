@@ -1,5 +1,7 @@
 # Circulation-specific statistics.
 
+export NoConditioning, ConditionOnDissipation
+
 using GPFields.Circulation.Kernels: AbstractKernel
 using LinearAlgebra: mul!
 

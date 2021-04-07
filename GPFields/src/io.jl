@@ -185,36 +185,59 @@ end
 """
     load_velocity!(v, gp::ParamsGP, datadir, field_index;
                    incompressible=true, slice=nothing)
+    load_velocity!(v, gp::ParamsGP, filename_pat; slice=nothing)
 
 Load velocity vector field `v = (v1, v2, ...)` from binary file.
 
-Data must be in the file `\$datadir/Vel.\$field_index.dat` (where `field_index`
-is formatted using 3 digits, as in "042").
+In the first variant, data must be in the file `\$datadir/Vel.\$field_index.dat`
+(where `field_index` is formatted using 3 digits, as in "042").
+
+In the second variant, `filename_pat` is a pattern such as
+`path/to/velocity_*.bin`, where the `*` will be replaced by `x`, `y` and
+`z` for the three velocity components.
 
 In the case of a slice, only the in-plane velocity components are loaded.
 
 See also [`load_psi!`](@ref).
 """
-function load_velocity!(vs::RealVector{T,N}, gp::ParamsGP{M},
-                        datadir::AbstractString, field_index;
-                        incompressible=true, slice=nothing) where {T,N,M}
+function load_velocity!(
+        vs::RealVector, gp::ParamsGP, filename_pat::AbstractString; kws...,
+    )
+    load_vector_field!(vs, gp, filename_pat; kws...)
+end
+
+function load_velocity!(
+        vs, gp, datadir::AbstractString, field_index::Integer;
+        incompressible=true, kws...,
+    )
     prefix = joinpath(datadir, incompressible ? "VI" : "VC")
     suffix = @sprintf "_d.%03d.dat" field_index
+    pat = string(prefix, '*', suffix)
+    load_velocity!(vs, gp, pat; kws...)
+end
+
+function load_vector_field!(
+        vs::NTuple{N}, gp::ParamsGP{M}, filename_pat::AbstractString;
+        slice = nothing,
+    ) where {N,M}
+
+    if '*' ∉ filename_pat
+        throw(ArgumentError("filename pattern must contain '*'"))
+    end
 
     components = dims_slice(Val(M), slice)
     @assert length(components) == N
 
     for (v, c) in zip(vs, components)
-        filename = string(prefix, "xyz"[c], suffix)
-        load_scalar_field!(v, gp; filename, slice)
+        filename = replace(filename_pat, '*' => "xyz"[c])
+        load_scalar_field!(v, gp, filename; slice)
     end
 
-    vs
 end
 
 function load_scalar_field!(
-        u::AbstractArray{T}, gp::ParamsGP{M};
-        filename::AbstractString, slice = nothing,
+        u::AbstractArray{T}, gp::ParamsGP{M}, filename::AbstractString;
+        slice = nothing,
     ) where {T,M}
     isfile(filename) || error("file not found: $filename")
     check_size(T, gp.dims, filename)

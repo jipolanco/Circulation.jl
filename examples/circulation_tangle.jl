@@ -31,9 +31,9 @@ function main()
     loop_sizes = make_loop_sizes(; base = 1.4, dims = dims)
     kernels = with_convolution ? RectangularKernel.(loop_sizes .* gp.dx[1]) : loop_sizes
 
-    fields = (
-        data_dir = expanduser("~/Data/GP/gGP_samples/tangle/256/fields"),
-        data_idx = 1,
+    data_params = (
+        directory = expanduser("~/Data/GP/gGP_samples/tangle/256/fields"),
+        timestep = 1,
         load_velocity = false,
     )
 
@@ -59,14 +59,12 @@ function main()
 
     to = TimerOutput()
     kwargs = (
-        data_idx = fields.data_idx,
-        load_velocity = fields.load_velocity,
         eps_vel = circulation.eps_velocity,
         to = to,
     )
 
     # Which fields to analyse.
-    which = if kwargs.load_velocity
+    which = if data_params.load_velocity
         # If a velocity field is loaded
         (
             VelocityLikeFields.Velocity,
@@ -97,13 +95,13 @@ function main()
         )
     end
 
-    analyse!(stats, gp, fields.data_dir; max_slices=1, kwargs...)
+    analyse!(stats, gp, data_params; max_slices=1, kwargs...)
 
     reset_timer!(to)
     reset!(stats)
 
     analyse!(
-        stats, gp, fields.data_dir;
+        stats, gp, data_params;
         max_slices = circulation.max_slices,
         kwargs...,
     )
