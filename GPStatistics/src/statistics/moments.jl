@@ -1,3 +1,10 @@
+export ParamsMoments, Moments
+
+Base.@kwdef struct ParamsMoments{F <: Union{Nothing, Int}}
+    integer    :: Int          # number of integer moments to compute (should be even)
+    fractional :: F = nothing  # number of fractional moments to compute
+end
+
 """
     Moments{T}
 
@@ -5,6 +12,7 @@ Integer moments of a scalar quantity (circulation, velocity increments, ...).
 
 ---
 
+    Moments(params::ParamsMoments, Nr::Integer, ::Type{T} = Float64)
     Moments(N::Integer, Nr::Integer, ::Type{T} = Float64; Nfrac = nothing)
 
 Construct object for computation of moments.
@@ -60,6 +68,9 @@ struct Moments{T, FracMatrix <: Union{Matrix{T},Nothing}} <: AbstractBaseStats
         new{T, FracMatrix}(false[], Nr, N, Nodd, Nm_frac, Nsamples, Mabs, Modd, Mfrac)
     end
 end
+
+Moments(p::ParamsMoments, etc...) =
+    Moments(p.integer, etc...; Nfrac = p.fractional)
 
 # Check whether fractional exponents are being computed.
 has_fractional(s::Moments) = s.Mfrac !== nothing

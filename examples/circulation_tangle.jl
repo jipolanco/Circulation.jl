@@ -1,5 +1,3 @@
-#!/usr/bin/env julia
-
 # Compute circulation statistics in turbulent tangle.
 #
 # Note that the analysis parameters are directly written to this file, and TOML
@@ -47,10 +45,8 @@ function main()
         # max_slices = typemax(Int),
         max_slices = 4,
         eps_velocity = 0,
-        moments_pmax = 10,
-        moments_Nfrac = nothing,
-        hist_Nedges = 4000,
-        hist_max_kappa = 30.5,
+        moments = ParamsMoments(integer = 10, fractional = nothing),
+        histogram = (Nedges = 4000, max_kappa = 30.5),
     )
 
     @info "Using convolutions: $with_convolution"
@@ -85,18 +81,17 @@ function main()
     end
 
     stats = let par = circulation
-        Nedges = par.hist_Nedges
+        Nedges = par.histogram.Nedges
         κ = gp.κ
-        M = par.hist_max_kappa
+        M = par.histogram.max_kappa
         edges = LinRange(-M * κ, M * κ, Nedges)
+        histogram = ParamsHistogram(bin_edges = edges)
 
         init_statistics(
             CirculationStats,
             kernels;
             which = which,
-            num_moments = par.moments_pmax,
-            moments_Nfrac = par.moments_Nfrac,
-            hist_edges = edges,
+            histogram, moments = par.moments,
             resampling_factor,
             compute_in_resampled_grid,
         )

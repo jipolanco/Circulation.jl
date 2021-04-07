@@ -1,3 +1,9 @@
+export ParamsHistogram, Histogram
+
+Base.@kwdef struct ParamsHistogram{Edges <: AbstractVector}
+    bin_edges :: Edges
+end
+
 """
     Histogram{T}
 
@@ -29,6 +35,8 @@ struct Histogram{T, Tb, BinType<:AbstractVector{Tb}} <: AbstractBaseStats
         new{T, Tb, BinType}(false[], Nr, Nbins, bin_edges, H, vmin, vmax, Nsamples)
     end
 end
+
+Histogram(p::ParamsHistogram, etc...) = Histogram(p.bin_edges, etc...)
 
 Base.eltype(::Type{<:Histogram{T}}) where {T} = T
 Base.zero(s::Histogram) = Histogram(s.bin_edges, s.Nr, eltype(s))

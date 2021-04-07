@@ -28,8 +28,8 @@ statistics(::CirculationStats) = (:moments, :histogram)
 """
     CirculationStats(
         loop_sizes;
-        hist_edges, num_moments,
-        moments_Nfrac = nothing,
+        histogram::ParamsHistogram,
+        moments::ParamsMoments,
         resampling_factor = 1,
         compute_in_resampled_grid = false,
     )
@@ -52,15 +52,15 @@ Construct and initialise statistics.
 """
 function CirculationStats(
         loop_sizes;
-        hist_edges, num_moments,
-        moments_Nfrac=nothing,
+        moments::ParamsMoments,
+        histogram::ParamsHistogram,
         resampling_factor=1,
         compute_in_resampled_grid=false,
     )
     resampling_factor >= 1 || error("resampling_factor must be positive")
     Nr = length(loop_sizes)
-    M = Moments(num_moments, Nr, Float64; Nfrac=moments_Nfrac)
-    H = Histogram(hist_edges, Nr, Int)
+    M = Moments(moments, Nr, Float64)
+    H = Histogram(histogram, Nr, Int)
     CirculationStats(Nr, loop_sizes, resampling_factor,
                      compute_in_resampled_grid, M, H)
 end
@@ -69,8 +69,7 @@ end
 """
     CirculationStats(
         kernels :: AbstractArray{<:Kernels.AbstractKernel};
-        hist_edges, num_moments,
-        moments_Nfrac = nothing,
+        histogram, moments,
         resampling_factor = 1,
     )
 
@@ -82,10 +81,6 @@ Construct and initialise statistics.
   (e.g. `RectangularKernel`). They will typically differ on their characteristic
   lengthscale (e.g. the size of a rectangular kernel).
 
-- `hist_edges`: sorted vector with edges of circulation histogram.
-
-- `num_moments`: number of circulation moments to compute.
-
 - `resampling_factor`: if greater than one, the loaded ψ fields are resampled
   into a finer grid using padding in Fourier space.
   The number of grid points is increased by a factor `resampling_factor` in
@@ -94,15 +89,14 @@ Construct and initialise statistics.
 """
 function CirculationStats(
         kernels :: AbstractArray{<:AbstractKernel};
-        hist_edges, num_moments,
-        moments_Nfrac = nothing,
+        histogram, moments,
         resampling_factor = 1,
         compute_in_resampled_grid = false,
     )
     resampling_factor >= 1 || error("resampling_factor must be positive")
     Nr = length(kernels)
-    M = Moments(num_moments, Nr, Float64; Nfrac = moments_Nfrac)
-    H = Histogram(hist_edges, Nr, Int)
+    M = Moments(moments, Nr, Float64)
+    H = Histogram(histogram, Nr, Int)
     CirculationStats(Nr, kernels, resampling_factor,
                      compute_in_resampled_grid, M, H)
 end
