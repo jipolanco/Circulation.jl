@@ -233,8 +233,6 @@ function _write_stats_group(g, s::AbstractBaseStats)
     g
 end
 
-_write_stats_group(g, ::DisabledStats) = g
-
 write_loop_sizes(g, loop_sizes) = g["loop_sizes"] = collect(loop_sizes)
 
 function write_loop_sizes(g, kernels::AbstractVector{<:AbstractKernel})

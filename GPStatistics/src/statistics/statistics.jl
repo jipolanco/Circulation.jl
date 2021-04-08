@@ -19,12 +19,9 @@ struct PhysicalMethod <: AbstractSamplingMethod end
 abstract type BaseStatsParams end
 abstract type AbstractBaseStats end
 
-include("disabled_stats.jl")
 include("moments.jl")
 include("histogram.jl")
 include("histogram_2D.jl")
-
-init_statistics(::Nothing, etc...) = DisabledStats()
 
 abstract type AbstractFlowStats end
 
