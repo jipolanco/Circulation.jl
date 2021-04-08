@@ -36,7 +36,7 @@ statistics(s::CirculationStats) = s.stats
 
 """
     CirculationStats(
-        loop_sizes_or_kernels, [conditioning = NoConditioning()];
+        loop_sizes_or_kernels, stats_params;
         histogram::s.ParamsHistogram,
         moments::ParamsMoments,
         resampling_factor = 1,
@@ -53,6 +53,8 @@ Construct and initialise statistics.
   All kernels must be of the same type (e.g. `RectangularKernel`). They will
   typically differ on their characteristic lengthscale (e.g. the size of a
   rectangular kernel).
+
+- `stats_params`: tuple with parameters for different statistics.
 
 - `resampling_factor`: if greater than one, the loaded ψ fields are resampled
   into a finer grid using padding in Fourier space.

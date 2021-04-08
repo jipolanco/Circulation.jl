@@ -16,6 +16,8 @@ abstract type AbstractSamplingMethod end
 struct ConvolutionMethod <: AbstractSamplingMethod end
 struct PhysicalMethod <: AbstractSamplingMethod end
 
+include("scalar_fields.jl")
+
 abstract type BaseStatsParams end
 abstract type AbstractBaseStats end
 

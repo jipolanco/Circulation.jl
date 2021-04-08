@@ -39,8 +39,11 @@ function main()
     circulation = (
         max_slices = 4,
         stats_params = (
-            # ParamsHistogram(Int64; bin_edges = circulation_bins),
-            ParamsHistogram2D(Int64; bin_edges = (circulation_bins, dissipation_bins)),
+            # ParamsHistogram(Int64, CirculationField(); bin_edges = circulation_bins),
+            ParamsHistogram2D(
+                Int64, (CirculationField(), DissipationField());
+                bin_edges = (circulation_bins, dissipation_bins),
+            ),
         )
         # moments = ParamsMoments(integer = 10, fractional = nothing),
         # histogram = ParamsHistogram(bin_edges = circulation_bins)

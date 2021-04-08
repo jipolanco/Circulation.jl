@@ -45,7 +45,7 @@ function main()
         # max_slices = typemax(Int),
         max_slices = 4,
         eps_velocity = 0,
-        moments = ParamsMoments(integer = 10, fractional = nothing),
+        moments = ParamsMoments(CirculationField(), integer = 10, fractional = nothing),
         histogram = (Nedges = 4000, max_kappa = 30.5),
     )
 
@@ -83,7 +83,7 @@ function main()
         κ = gp.κ
         M = par.histogram.max_kappa
         edges = LinRange(-M * κ, M * κ, Nedges)
-        histogram = ParamsHistogram(bin_edges = edges)
+        histogram = ParamsHistogram(CirculationField(), bin_edges = edges)
 
         stats_params = (
             histogram,

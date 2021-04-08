@@ -2,16 +2,18 @@ export ParamsHistogram, Histogram
 
 struct ParamsHistogram{
         T <: Real,
+        Field <: AbstractScalarField,
         Edges <: AbstractVector,
     } <: BaseStatsParams
 
+    field     :: Field
     bin_edges :: Edges
 
-    ParamsHistogram(::Type{T}; bin_edges) where {T} =
-        new{T, typeof(bin_edges)}(bin_edges)
+    ParamsHistogram(::Type{T}, field; bin_edges) where {T} =
+        new{T, typeof(field), typeof(bin_edges)}(field, bin_edges)
 end
 
-ParamsHistogram(; kws...) = ParamsHistogram(Int64; kws...)
+ParamsHistogram(field; kws...) = ParamsHistogram(Int64, field; kws...)
 
 init_statistics(p::ParamsHistogram, etc...) = Histogram(p, etc...)
 

@@ -2,16 +2,18 @@ export ParamsHistogram2D, Histogram2D
 
 struct ParamsHistogram2D{
         T,
-        Edges <: Tuple{Vararg{AbstractVector,2}},
+        Fields <: Tuple{Vararg{AbstractScalarField,2}},
+        Edges  <: Tuple{Vararg{AbstractVector,2}},
     } <: BaseStatsParams
 
+    fields    :: Fields
     bin_edges :: Edges
 
-    ParamsHistogram2D(::Type{T}; bin_edges) where {T} =
-        new{T, typeof(bin_edges)}(bin_edges)
+    ParamsHistogram2D(::Type{T}, fields; bin_edges) where {T} =
+        new{T, typeof(fields), typeof(bin_edges)}(fields, bin_edges)
 end
 
-ParamsHistogram2D(; kws...) = ParamsHistogram2D(Int64; kws...)
+ParamsHistogram2D(fields; kws...) = ParamsHistogram2D(Int64, fields; kws...)
 
 init_statistics(p::ParamsHistogram2D, etc...) = Histogram2D(p, etc...)
 

@@ -2,17 +2,19 @@ export ParamsMoments, Moments
 
 struct ParamsMoments{
         T <: AbstractFloat,
+        Field <: AbstractScalarField,
         F <: Union{Nothing, Int},
     } <: BaseStatsParams
 
+    field      :: Field
     integer    :: Int  # number of integer moments to compute (should be even)
     fractional :: F    # number of fractional moments to compute
 
-    ParamsMoments(::Type{T}; integer, fractional = nothing) where {T} =
-        new{T, typeof(fractional)}(integer, fractional)
+    ParamsMoments(::Type{T}, field; integer, fractional = nothing) where {T} =
+        new{T, typeof(field), typeof(fractional)}(field, integer, fractional)
 end
 
-ParamsMoments(; kws...) = ParamsMoments(Float64; kws...)
+ParamsMoments(field; kws...) = ParamsMoments(Float64, field; kws...)
 
 init_statistics(p::ParamsMoments, etc...) = Moments(p, etc...)
 
