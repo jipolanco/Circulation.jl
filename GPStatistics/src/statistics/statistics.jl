@@ -17,6 +17,7 @@ struct ConvolutionMethod <: AbstractSamplingMethod end
 struct PhysicalMethod <: AbstractSamplingMethod end
 
 abstract type AbstractBaseStats end
+include("disabled_stats.jl")
 include("moments.jl")
 include("histogram.jl")
 

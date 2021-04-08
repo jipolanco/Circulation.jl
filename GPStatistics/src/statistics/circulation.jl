@@ -10,13 +10,13 @@ Circulation statistics, including moments and histograms.
 """
 struct CirculationStats{
         Loops,
-        M <: Moments,
-        H <: Histogram,
+        M <: Union{DisabledStats, Moments},
+        H <: Union{DisabledStats, Histogram},
         Conditioning <: AbstractConditioning,
     } <: AbstractFlowStats
     conditioning :: Conditioning
-    Nr          :: Int    # number of loop sizes
-    loop_sizes  :: Loops  # vector of length Nr (can be integers or convolution kernels)
+    Nr           :: Int    # number of loop sizes
+    loop_sizes   :: Loops  # vector of length Nr (can be integers or convolution kernels)
     resampling_factor :: Int
     resampled_grid :: Bool
     moments    :: M
@@ -69,15 +69,15 @@ Construct and initialise statistics.
 function CirculationStats(
         loop_sizes::AbstractArray{T} where {T <: Union{Real, AbstractKernel}},
         conditioning = NoConditioning();
-        moments::ParamsMoments,
-        histogram::ParamsHistogram,
+        moments::Union{Nothing,ParamsMoments} = nothing,
+        histogram::Union{Nothing,ParamsHistogram} = nothing,
         resampling_factor=1,
         compute_in_resampled_grid=false,
     )
     resampling_factor >= 1 || error("resampling_factor must be positive")
     Nr = length(loop_sizes)
-    M = Moments(moments, Nr, Float64)
-    H = Histogram(histogram, Nr, Int)
+    M = isnothing(moments) ? DisabledStats() : Moments(moments, Nr, Float64)
+    H = isnothing(histogram) ? DisabledStats() : Histogram(histogram, Nr, Int)
     CirculationStats(conditioning, Nr, loop_sizes, resampling_factor,
                      compute_in_resampled_grid, M, H)
 end
@@ -224,10 +224,21 @@ function Base.write(g::Union{HDF5.File,HDF5.Group}, stats::CirculationStats)
     write_loop_sizes(g, stats.loop_sizes)
     g["resampling_factor"] = stats.resampling_factor
     g["resampled_grid"] = stats.resampled_grid
-    write(create_group(g, "Moments"), stats.moments)
-    write(create_group(g, "Histogram"), stats.histogram)
+    map(statistics(stats)) do field
+        s = getfield(stats, field)
+        _write_stats_group(g, s)
+    end
     g
 end
+
+function _write_stats_group(g, s::AbstractBaseStats)
+    name = string(nameof(typeof(s)))
+    gg = create_group(g, name)
+    write(gg, s)
+    g
+end
+
+_write_stats_group(g, ::DisabledStats) = g
 
 write_loop_sizes(g, loop_sizes) = g["loop_sizes"] = collect(loop_sizes)
 

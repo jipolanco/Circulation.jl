@@ -45,7 +45,8 @@ function main()
         # max_slices = typemax(Int),
         max_slices = 4,
         eps_velocity = 0,
-        moments = ParamsMoments(integer = 10, fractional = nothing),
+        # moments = ParamsMoments(integer = 10, fractional = nothing),
+        moments = nothing,
         histogram = (Nedges = 4000, max_kappa = 30.5),
     )
 
