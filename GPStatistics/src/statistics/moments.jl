@@ -1,9 +1,11 @@
 export ParamsMoments, Moments
 
-Base.@kwdef struct ParamsMoments{F <: Union{Nothing, Int}}
+Base.@kwdef struct ParamsMoments{F <: Union{Nothing, Int}} <: BaseStatsParams
     integer    :: Int          # number of integer moments to compute (should be even)
     fractional :: F = nothing  # number of fractional moments to compute
 end
+
+init_statistics(p::ParamsMoments, etc...) = Moments(p, etc...)
 
 """
     Moments{T}
@@ -25,7 +27,7 @@ range `0 < p ≤ 1`.
 For example, if `Nfrac = 10`, the exponents in `0.1:0.1:1` will be considered.
 """
 struct Moments{T, FracMatrix <: Union{Matrix{T},Nothing}} <: AbstractBaseStats
-    finalised :: Ref{Bool}
+    finalised :: Base.RefValue{Bool}
     Nr     :: Int  # number of "columns" of data (e.g. one per loop size)
     Nm     :: Int  # number of moments to compute (assumed to be even)
     Nm_odd :: Int  # number of odd moments to compute (= N / 2)
@@ -65,7 +67,9 @@ struct Moments{T, FracMatrix <: Union{Matrix{T},Nothing}} <: AbstractBaseStats
 
         FracMatrix = typeof(Mfrac)
 
-        new{T, FracMatrix}(false[], Nr, N, Nodd, Nm_frac, Nsamples, Mabs, Modd, Mfrac)
+        new{T, FracMatrix}(
+            Ref(false), Nr, N, Nodd, Nm_frac, Nsamples, Mabs, Modd, Mfrac,
+        )
     end
 end
 
@@ -145,10 +149,7 @@ function update!(::NoConditioning, s::Moments, Γ, r)
     s
 end
 
-function update!(
-        cond::ConditionOnDissipation, s::Moments,
-        fields, r,
-    )
+function update!(cond::ConditionOnDissipation, s::Moments, fields, r)
     Γ = fields.Γ
     ε = fields.ε
     # TODO continue...

@@ -1,8 +1,10 @@
 export ParamsHistogram, Histogram
 
-Base.@kwdef struct ParamsHistogram{Edges <: AbstractVector}
+Base.@kwdef struct ParamsHistogram{Edges <: AbstractVector} <: BaseStatsParams
     bin_edges :: Edges
 end
+
+init_statistics(p::ParamsHistogram, etc...) = Histogram(p, etc...)
 
 """
     Histogram{T}
@@ -10,7 +12,7 @@ end
 Histogram of a scalar quantity.
 """
 struct Histogram{T, Tb, BinType<:AbstractVector{Tb}} <: AbstractBaseStats
-    finalised :: Ref{Bool}
+    finalised :: Base.RefValue{Bool}
     Nr    :: Int          # number of "columns" of data (e.g. one per loop size)
     Nbins :: Int          # number of bins
     bin_edges :: BinType  # sorted list of bin edges [Nbins + 1]
@@ -32,7 +34,9 @@ struct Histogram{T, Tb, BinType<:AbstractVector{Tb}} <: AbstractBaseStats
         Tb = eltype(bin_edges)
         vmin = zeros(Tb, Nr)
         vmax = zeros(Tb, Nr)
-        new{T, Tb, BinType}(false[], Nr, Nbins, bin_edges, H, vmin, vmax, Nsamples)
+        new{T, Tb, BinType}(
+            Ref(false), Nr, Nbins, bin_edges, H, vmin, vmax, Nsamples,
+        )
     end
 end
 

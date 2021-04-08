@@ -76,8 +76,8 @@ function CirculationStats(
     )
     resampling_factor >= 1 || error("resampling_factor must be positive")
     Nr = length(loop_sizes)
-    M = isnothing(moments) ? DisabledStats() : Moments(moments, Nr, Float64)
-    H = isnothing(histogram) ? DisabledStats() : Histogram(histogram, Nr, Int)
+    M = init_statistics(moments, Nr, Float64)
+    H = init_statistics(histogram, Nr, Int)
     CirculationStats(conditioning, Nr, loop_sizes, resampling_factor,
                      compute_in_resampled_grid, M, H)
 end
