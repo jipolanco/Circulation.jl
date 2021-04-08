@@ -10,22 +10,20 @@ Circulation statistics, including moments and histograms.
 """
 struct CirculationStats{
         Loops,
-        M <: Union{DisabledStats, Moments},
-        H <: Union{DisabledStats, Histogram},
         Conditioning <: AbstractConditioning,
+        StatsTuple <: Tuple{Vararg{AbstractBaseStats}},
     } <: AbstractFlowStats
     conditioning :: Conditioning
     Nr           :: Int    # number of loop sizes
     loop_sizes   :: Loops  # vector of length Nr (can be integers or convolution kernels)
     resampling_factor :: Int
     resampled_grid :: Bool
-    moments    :: M
-    histogram  :: H
+    stats          :: StatsTuple
 end
 
 function Base.zero(s::CirculationStats)
     CirculationStats(s.conditioning, s.Nr, s.loop_sizes, s.resampling_factor,
-                     s.resampled_grid, zero(s.moments), zero(s.histogram))
+                     s.resampled_grid, zero.(s.stats))
 end
 
 @inline sampling_method(::Type{CirculationStats}, ::Type{<:Integer}) = PhysicalMethod()
@@ -34,12 +32,12 @@ end
     sampling_method(CirculationStats, eltype(Loops))
 @inline sampling_method(s::CirculationStats) = sampling_method(typeof(s))
 
-statistics(::CirculationStats) = (:moments, :histogram)
+statistics(s::CirculationStats) = s.stats
 
 """
     CirculationStats(
         loop_sizes_or_kernels, [conditioning = NoConditioning()];
-        histogram::ParamsHistogram,
+        histogram::s.ParamsHistogram,
         moments::ParamsMoments,
         resampling_factor = 1,
         compute_in_resampled_grid = false,
@@ -68,18 +66,16 @@ Construct and initialise statistics.
 """
 function CirculationStats(
         loop_sizes::AbstractArray{T} where {T <: Union{Real, AbstractKernel}},
+        stats_params::Tuple{Vararg{BaseStatsParams}},
         conditioning = NoConditioning();
-        moments = nothing,
-        histogram = nothing,
         resampling_factor=1,
         compute_in_resampled_grid=false,
     )
     resampling_factor >= 1 || error("resampling_factor must be positive")
     Nr = length(loop_sizes)
-    M = init_statistics(moments, Nr)
-    H = init_statistics(histogram, Nr)
+    stats = init_statistics.(stats_params, Nr)
     CirculationStats(conditioning, Nr, loop_sizes, resampling_factor,
-                     compute_in_resampled_grid, M, H)
+                     compute_in_resampled_grid, stats)
 end
 
 _allocate_fields(::AbstractConditioning, etc...) = (;)
@@ -224,8 +220,7 @@ function Base.write(g::Union{HDF5.File,HDF5.Group}, stats::CirculationStats)
     write_loop_sizes(g, stats.loop_sizes)
     g["resampling_factor"] = stats.resampling_factor
     g["resampled_grid"] = stats.resampled_grid
-    map(statistics(stats)) do field
-        s = getfield(stats, field)
+    map(statistics(stats)) do s
         _write_stats_group(g, s)
     end
     g

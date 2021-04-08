@@ -22,7 +22,7 @@ function Base.zero(s::IncrementStats)
 end
 
 increments(s::IncrementStats) = s.increments
-statistics(::IncrementStats) = (:moments, :histogram)
+statistics(s::IncrementStats) = (s.moments, s.histogram)
 
 """
     IncrementStats(increments;

@@ -45,8 +45,7 @@ function main()
         # max_slices = typemax(Int),
         max_slices = 4,
         eps_velocity = 0,
-        # moments = ParamsMoments(integer = 10, fractional = nothing),
-        moments = nothing,
+        moments = ParamsMoments(integer = 10, fractional = nothing),
         histogram = (Nedges = 4000, max_kappa = 30.5),
     )
 
@@ -86,11 +85,16 @@ function main()
         edges = LinRange(-M * κ, M * κ, Nedges)
         histogram = ParamsHistogram(bin_edges = edges)
 
+        stats_params = (
+            histogram,
+            par.moments,
+        )
+
         init_statistics(
             CirculationStats,
-            kernels;
+            kernels,
+            stats_params;
             which = which,
-            histogram, moments = par.moments,
             resampling_factor,
             compute_in_resampled_grid,
         )

@@ -56,8 +56,9 @@ with length equal to the number of threads.
 """
 function update!(cond, stats::AbstractFlowStats, Γ, r_ind; to=TimerOutput())
     @assert r_ind ∈ 1:stats.Nr
-    for name in statistics(stats)
-        @timeit to string(name) update!(cond, getfield(stats, name), Γ, r_ind)
+    for s in statistics(stats)
+        name = string(nameof(typeof(s)))
+        @timeit to name update!(cond, s, Γ, r_ind)
     end
     stats
 end
@@ -113,8 +114,10 @@ Reduce values from list of statistics.
 """
 function reduce!(stats::S, v::AbstractVector{<:S}) where {S <: AbstractFlowStats}
     @assert all(stats.Nr .== getfield.(v, :Nr))
-    for name in statistics(stats)
-        reduce!(getfield(stats, name), getfield.(v, name))
+    for (i, sout) in pairs(statistics(stats))
+        stype = typeof(sout)
+        stats_in = map(s -> statistics(s)[i]::stype, v)
+        reduce!(sout, stats_in)
     end
     stats
 end
@@ -138,9 +141,7 @@ For instance, moment data is divided by the number of samples to obtain the
 actual moments.
 """
 function finalise!(stats::AbstractFlowStats)
-    for name in statistics(stats)
-        finalise!.(getfield(stats, name))
-    end
+    map(finalise!, statistics(stats))
     stats
 end
 
@@ -150,9 +151,7 @@ end
 Reset all statistics to zero.
 """
 function reset!(stats::AbstractFlowStats)
-    for name in statistics(stats)
-        reset!.(getfield(stats, name))
-    end
+    map(reset!, statistics(stats))
     stats
 end
 
