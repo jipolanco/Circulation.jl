@@ -69,15 +69,15 @@ Construct and initialise statistics.
 function CirculationStats(
         loop_sizes::AbstractArray{T} where {T <: Union{Real, AbstractKernel}},
         conditioning = NoConditioning();
-        moments::Union{Nothing,ParamsMoments} = nothing,
-        histogram::Union{Nothing,ParamsHistogram} = nothing,
+        moments = nothing,
+        histogram = nothing,
         resampling_factor=1,
         compute_in_resampled_grid=false,
     )
     resampling_factor >= 1 || error("resampling_factor must be positive")
     Nr = length(loop_sizes)
-    M = init_statistics(moments, Nr, Float64)
-    H = init_statistics(histogram, Nr, Int)
+    M = init_statistics(moments, Nr)
+    H = init_statistics(histogram, Nr)
     CirculationStats(conditioning, Nr, loop_sizes, resampling_factor,
                      compute_in_resampled_grid, M, H)
 end

@@ -1,9 +1,18 @@
 export ParamsMoments, Moments
 
-Base.@kwdef struct ParamsMoments{F <: Union{Nothing, Int}} <: BaseStatsParams
-    integer    :: Int          # number of integer moments to compute (should be even)
-    fractional :: F = nothing  # number of fractional moments to compute
+struct ParamsMoments{
+        T <: AbstractFloat,
+        F <: Union{Nothing, Int},
+    } <: BaseStatsParams
+
+    integer    :: Int  # number of integer moments to compute (should be even)
+    fractional :: F    # number of fractional moments to compute
+
+    ParamsMoments(::Type{T}; integer, fractional = nothing) where {T} =
+        new{T, typeof(fractional)}(integer, fractional)
 end
+
+ParamsMoments(; kws...) = ParamsMoments(Float64; kws...)
 
 init_statistics(p::ParamsMoments, etc...) = Moments(p, etc...)
 
@@ -14,7 +23,7 @@ Integer moments of a scalar quantity (circulation, velocity increments, ...).
 
 ---
 
-    Moments(params::ParamsMoments, Nr::Integer, ::Type{T} = Float64)
+    Moments(params::ParamsMoments, Nr::Integer)
     Moments(N::Integer, Nr::Integer, ::Type{T} = Float64; Nfrac = nothing)
 
 Construct object for computation of moments.
@@ -73,8 +82,8 @@ struct Moments{T, FracMatrix <: Union{Matrix{T},Nothing}} <: AbstractBaseStats
     end
 end
 
-Moments(p::ParamsMoments, etc...) =
-    Moments(p.integer, etc...; Nfrac = p.fractional)
+Moments(p::ParamsMoments{T}, Nr) where {T} =
+    Moments(p.integer, Nr, T; Nfrac = p.fractional)
 
 # Check whether fractional exponents are being computed.
 has_fractional(s::Moments) = s.Mfrac !== nothing

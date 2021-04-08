@@ -1,9 +1,17 @@
 export ParamsHistogram2D, Histogram2D
 
-Base.@kwdef struct ParamsHistogram2D{Edges1, Edges2} <: BaseStatsParams
-    bin_edges1 :: Edges1
-    bin_edges2 :: Edges2
+struct ParamsHistogram2D{
+        T,
+        Edges <: Tuple{Vararg{AbstractVector,2}},
+    } <: BaseStatsParams
+
+    bin_edges :: Edges
+
+    ParamsHistogram2D(::Type{T}; bin_edges) where {T} =
+        new{T, typeof(bin_edges)}(bin_edges)
 end
+
+ParamsHistogram2D(; kws...) = ParamsHistogram2D(Int64; kws...)
 
 init_statistics(p::ParamsHistogram2D, etc...) = Histogram2D(p, etc...)
 
@@ -24,8 +32,8 @@ struct Histogram2D{
     # This includes outliers, i.e. events falling outside of the histogram.
     Nsamples :: Vector{Int}
 
-    function Histogram2D(p::ParamsHistogram2D, Nr::Integer, ::Type{T} = Int) where {T}
-        edges = (p.bin_edges1, p.bin_edges2)
+    function Histogram2D(p::ParamsHistogram2D{T}, Nr::Integer) where {T}
+        edges = p.bin_edges
         Nbins = length.(edges) .- 1
         Nsamples = zeros(Int, Nr)
         BinType = typeof(edges)
