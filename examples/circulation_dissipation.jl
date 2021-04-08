@@ -38,8 +38,12 @@ function main()
 
     circulation = (
         max_slices = 4,
-        moments = ParamsMoments(integer = 10, fractional = nothing),
-        histogram = ParamsHistogram(bin_edges = circulation_bins)
+        stats_params = (
+            # ParamsHistogram(Int64; bin_edges = circulation_bins),
+            ParamsHistogram2D(Int64; bin_edges = (circulation_bins, dissipation_bins)),
+        )
+        # moments = ParamsMoments(integer = 10, fractional = nothing),
+        # histogram = ParamsHistogram(bin_edges = circulation_bins)
     )
 
     # ============================================================ #
@@ -51,10 +55,11 @@ function main()
 
     to = TimerOutput()
     stats = init_statistics(
-        CirculationStats, convolution_kernels, conditioning;
+        CirculationStats,
+        convolution_kernels,
+        circulation.stats_params,
+        conditioning;
         which = (VelocityLikeFields.Velocity, ),
-        histogram = circulation.histogram,
-        moments = circulation.moments,
     )
 
     analyse!(stats, gp, data_params; to)
