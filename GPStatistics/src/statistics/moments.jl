@@ -2,16 +2,18 @@ export ParamsMoments, Moments
 
 struct ParamsMoments{
         T <: AbstractFloat,
-        Field <: AbstractScalarField,
+        Fields <: Tuple{AbstractScalarField},
         F <: Union{Nothing, Int},
     } <: BaseStatsParams
 
-    field      :: Field
+    fields     :: Fields
     integer    :: Int  # number of integer moments to compute (should be even)
     fractional :: F    # number of fractional moments to compute
 
-    ParamsMoments(::Type{T}, field; integer, fractional = nothing) where {T} =
-        new{T, typeof(field), typeof(fractional)}(field, integer, fractional)
+    function ParamsMoments(::Type{T}, field; integer, fractional = nothing) where {T}
+        fields = (field,)
+        new{T, typeof(fields), typeof(fractional)}(fields, integer, fractional)
+    end
 end
 
 ParamsMoments(field; kws...) = ParamsMoments(Float64, field; kws...)
@@ -37,7 +39,12 @@ For this, set the value of `Nfrac` to the number of exponents to consider in the
 range `0 < p ≤ 1`.
 For example, if `Nfrac = 10`, the exponents in `0.1:0.1:1` will be considered.
 """
-struct Moments{T, FracMatrix <: Union{Matrix{T},Nothing}} <: AbstractBaseStats
+struct Moments{
+        T, FracMatrix <: Union{Matrix{T},Nothing},
+        Params <: ParamsMoments,
+    } <: AbstractBaseStats
+
+    params :: Params
     finalised :: Base.RefValue{Bool}
     Nr     :: Int  # number of "columns" of data (e.g. one per loop size)
     Nm     :: Int  # number of moments to compute (assumed to be even)
@@ -57,8 +64,9 @@ struct Moments{T, FracMatrix <: Union{Matrix{T},Nothing}} <: AbstractBaseStats
     Modd :: Matrix{T}    # odd moments of Γ [Nm_odd, Nr]
     Mfrac :: FracMatrix   # fractional moments of |Γ| [Nm_frac, Nr]
 
-    function Moments(N::Integer, Nr::Integer, ::Type{T} = Float64;
-                     Nfrac::Union{Int,Nothing} = nothing) where {T}
+    function Moments(p::ParamsMoments{T}, Nr::Integer) where {T}
+        N = p.integer
+        Nfrac = p.fractional
         iseven(N) || throw(ArgumentError("`N` should be even!"))
         Nodd = N >> 1
         @assert 2Nodd == N
@@ -78,22 +86,14 @@ struct Moments{T, FracMatrix <: Union{Matrix{T},Nothing}} <: AbstractBaseStats
 
         FracMatrix = typeof(Mfrac)
 
-        new{T, FracMatrix}(
-            Ref(false), Nr, N, Nodd, Nm_frac, Nsamples, Mabs, Modd, Mfrac,
+        new{T, FracMatrix, typeof(p)}(
+            p, Ref(false), Nr, N, Nodd, Nm_frac, Nsamples, Mabs, Modd, Mfrac,
         )
     end
 end
 
-Moments(p::ParamsMoments{T}, Nr) where {T} =
-    Moments(p.integer, Nr, T; Nfrac = p.fractional)
-
 # Check whether fractional exponents are being computed.
 has_fractional(s::Moments) = s.Mfrac !== nothing
-
-# Reconstruct `Nfrac` keyword argument to be passed to constructor.
-_get_Nfrac_kwarg(s::Moments) = _get_Nfrac_kwarg(Val(has_fractional(s)), s)
-_get_Nfrac_kwarg(frac::Val{true}, s::Moments) = s.Nm_frac + 1
-_get_Nfrac_kwarg(frac::Val{false}, s::Moments) = nothing
 
 # Get computed moment exponents.
 function exponents(s::Moments)
@@ -110,8 +110,7 @@ exponents(frac::Val{true}, s::Moments) =
     (; frac = (1:s.Nm_frac) ./ (s.Nm_frac + 1))
 
 Base.eltype(::Type{<:Moments{T}}) where {T} = T
-Base.zero(s::Moments) =
-    Moments(s.Nm, s.Nr, eltype(s), Nfrac=_get_Nfrac_kwarg(s))
+Base.zero(s::Moments) = Moments(s.params, s.Nr)
 
 function update!(::NoConditioning, s::Moments, Γ, r)
     @assert 1 <= r <= s.Nr

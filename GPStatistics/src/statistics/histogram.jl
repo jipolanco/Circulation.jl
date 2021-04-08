@@ -2,15 +2,17 @@ export ParamsHistogram, Histogram
 
 struct ParamsHistogram{
         T <: Real,
-        Field <: AbstractScalarField,
+        Fields <: Tuple{AbstractScalarField},
         Edges <: AbstractVector,
     } <: BaseStatsParams
 
-    field     :: Field
+    fields    :: Fields
     bin_edges :: Edges
 
-    ParamsHistogram(::Type{T}, field; bin_edges) where {T} =
-        new{T, typeof(field), typeof(bin_edges)}(field, bin_edges)
+    function ParamsHistogram(::Type{T}, field; bin_edges) where {T}
+        fields = (field,)
+        new{T, typeof(fields), typeof(bin_edges)}(fields, bin_edges)
+    end
 end
 
 ParamsHistogram(field; kws...) = ParamsHistogram(Int64, field; kws...)
@@ -22,7 +24,12 @@ init_statistics(p::ParamsHistogram, etc...) = Histogram(p, etc...)
 
 Histogram of a scalar quantity.
 """
-struct Histogram{T, Tb, BinType<:AbstractVector{Tb}} <: AbstractBaseStats
+struct Histogram{
+        T, Tb, BinType<:AbstractVector{Tb},
+        Params <: ParamsHistogram,
+    } <: AbstractBaseStats
+
+    params :: Params
     finalised :: Base.RefValue{Bool}
     Nr    :: Int          # number of "columns" of data (e.g. one per loop size)
     Nbins :: Int          # number of bins
@@ -36,8 +43,8 @@ struct Histogram{T, Tb, BinType<:AbstractVector{Tb}} <: AbstractBaseStats
     # This includes outliers, i.e. events falling outside of the histogram.
     Nsamples :: Vector{Int}
 
-    function Histogram(bin_edges::AbstractVector, Nr::Integer,
-                       ::Type{T} = Int) where {T}
+    function Histogram(p::ParamsHistogram{T}, Nr::Integer) where {T}
+        bin_edges = p.bin_edges
         Nbins = length(bin_edges) - 1
         H = zeros(T, Nbins, Nr)
         Nsamples = zeros(Int, Nr)
@@ -45,16 +52,14 @@ struct Histogram{T, Tb, BinType<:AbstractVector{Tb}} <: AbstractBaseStats
         Tb = eltype(bin_edges)
         vmin = zeros(Tb, Nr)
         vmax = zeros(Tb, Nr)
-        new{T, Tb, BinType}(
-            Ref(false), Nr, Nbins, bin_edges, H, vmin, vmax, Nsamples,
+        new{T, Tb, BinType, typeof(p)}(
+            p, Ref(false), Nr, Nbins, bin_edges, H, vmin, vmax, Nsamples,
         )
     end
 end
 
-Histogram(p::ParamsHistogram{T}, Nr) where {T} = Histogram(p.bin_edges, Nr, T)
-
 Base.eltype(::Type{<:Histogram{T}}) where {T} = T
-Base.zero(s::Histogram) = Histogram(s.bin_edges, s.Nr, eltype(s))
+Base.zero(s::Histogram) = Histogram(s.params, s.Nr)
 
 function update!(::NoConditioning, s::Histogram, Γ, r)
     @assert 1 <= r <= s.Nr
