@@ -54,7 +54,8 @@ end
 Base.eltype(::Type{<:Histogram2D{T}}) where {T} = T
 Base.zero(s::Histogram2D) = Histogram2D(s.params, s.Nr)
 
-function update!(cond, s::Histogram2D, Γ, r)
+function update!(s::Histogram2D, fields::NamedTuple, r)
+    u, v = getfields(s, fields)
     s
 end
 

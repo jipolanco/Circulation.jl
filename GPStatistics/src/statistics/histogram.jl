@@ -61,7 +61,8 @@ end
 Base.eltype(::Type{<:Histogram{T}}) where {T} = T
 Base.zero(s::Histogram) = Histogram(s.params, s.Nr)
 
-function update!(::NoConditioning, s::Histogram, Γ, r)
+function update!(s::Histogram, fields, r)
+    Γ, = getfields(s, fields)
     @assert 1 <= r <= s.Nr
 
     s.Nsamples[r] += length(Γ)
@@ -86,15 +87,6 @@ function update!(::NoConditioning, s::Histogram, Γ, r)
     s.vmax[r] = vmax
 
     s
-end
-
-function update!(
-        cond::ConditionOnDissipation, s::Histogram,
-        fields, r,
-    )
-    Γ = fields.Γ
-    ε = fields.ε
-    # TODO continue...
 end
 
 function reduce!(s::Histogram, v)

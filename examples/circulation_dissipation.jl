@@ -52,7 +52,6 @@ function main()
     # ============================================================ #
 
     convolution_kernels = RectangularKernel.(loop_sizes .* gp.dx[1])
-    conditioning = ConditionOnDissipation(dissipation_bins)
 
     @info "Loop sizes: $loop_sizes ($(length(loop_sizes)) sizes)"
 
@@ -60,8 +59,7 @@ function main()
     stats = init_statistics(
         CirculationStats,
         convolution_kernels,
-        circulation.stats_params,
-        conditioning;
+        circulation.stats_params;
         which = (VelocityLikeFields.Velocity, ),
     )
 

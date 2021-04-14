@@ -5,13 +5,6 @@ end
 
 using .VelocityLikeFields
 
-export NoConditioning, ConditionOnDissipation
-abstract type AbstractConditioning end
-struct NoConditioning <: AbstractConditioning end
-struct ConditionOnDissipation{Edges <: AbstractVector} <: AbstractConditioning
-    bin_edges :: Edges  # defines the binning of dissipation
-end
-
 abstract type AbstractSamplingMethod end
 struct ConvolutionMethod <: AbstractSamplingMethod end
 struct PhysicalMethod <: AbstractSamplingMethod end
@@ -26,6 +19,13 @@ abstract type AbstractBaseStats end
 
 parameters(s::AbstractBaseStats) = s.params
 scalar_fields(s::AbstractBaseStats) = scalar_fields(parameters(s))
+
+function getfields(s::AbstractBaseStats, fields)
+    map(scalar_fields(s)) do ff
+        name = fieldname(ff)
+        getproperty(fields, name)
+    end
+end
 
 include("moments.jl")
 include("histogram.jl")
@@ -59,7 +59,6 @@ include("circulation.jl")
 include("velocity_increments.jl")
 
 scalar_fields(s::AbstractFlowStats) = scalar_fields(statistics(s))
-conditioning(s::AbstractFlowStats) = s.conditioning
 
 # Dictionary of statistics.
 # Useful for defining flow statistics related to quantities such as velocity,
@@ -76,45 +75,28 @@ Base.zero(s::SD) where {SD <: StatsDict} = SD(k => zero(v) for (k, v) in s)
 Base.zero(s::Tuple{Vararg{S}}) where {S <: AbstractBaseStats} = zero.(s)
 
 """
-    update!(conditioning, stats::AbstractFlowStats, Γ, r_ind; to=TimerOutput())
+    update!(stats::AbstractFlowStats, fields, r_ind; to=TimerOutput())
 
-Update circulation data associated to a given loop size (with index `r_ind`)
-using circulation data.
+Update statistics associated to a given loop size (with index `r_ind`)
+using data in `fields`.
+
+`fields` should be a `NamedTuple` containing fields such as `Γ` (circulation)
+and maybe `ε` (coarse-grained dissipation).
 
 For threaded computation, `stats` should be a vector of `AbstractFlowStats`,
 with length equal to the number of threads.
 """
-function update!(cond, stats::AbstractFlowStats, Γ, r_ind; to=TimerOutput())
+function update!(stats::AbstractFlowStats, fields, r_ind; to=TimerOutput())
     @assert r_ind ∈ 1:stats.Nr
     for s in statistics(stats)
         name = string(nameof(typeof(s)))
-        @timeit to name update!(cond, s, Γ, r_ind)
+        @timeit to name update!(s, fields, r_ind)
     end
     stats
 end
 
-function update!(cond::NoConditioning,
-                 stats::AbstractVector{<:AbstractFlowStats},
-                 Γ, r_ind; to=TimerOutput())
-    Nth = nthreads()
-    @assert length(stats) == Nth
-    N = length(Γ)
-    # Split Γ field among threads.
-    Γ_v = vec(Γ)
-    Γ_inds = collect(Iterators.partition(1:N, div(N, Nth, RoundUp)))
-    @assert length(Γ_inds) == Nth
-    @threads for t = 1:Nth
-        timer = t == 1 ? to : TimerOutput()
-        s = stats[t]
-        Γ_t = view(Γ_v, Γ_inds[t])
-        update!(cond, s, Γ_t, r_ind; to=timer)
-    end
-    stats
-end
-
-function update!(cond::ConditionOnDissipation,
-                 stats::AbstractVector{<:AbstractFlowStats},
-                 fields, r_ind; to=TimerOutput())
+function update!(stats::AbstractVector{<:AbstractFlowStats},
+                 fields::NamedTuple, r_ind; to=TimerOutput())
     Nth = nthreads()
     @assert length(stats) == Nth
     N = length(first(fields))
@@ -129,13 +111,13 @@ function update!(cond::ConditionOnDissipation,
         fields_t = map(fields_v) do u
             view(u, Γ_inds[t])
         end
-        update!(cond, s, fields_t, r_ind; to=timer)
+        update!(s, fields_t, r_ind; to=timer)
     end
     stats
 end
 
-update!(cond, s::Tuple, Γ::Tuple, args...) =
-    map((a, b) -> update!(cond, a, b, args...), s, Γ)
+update!(s::Tuple, Γ::Tuple, args...) =
+    map((a, b) -> update!(a, b, args...), s, Γ)
 
 """
     reduce!(stats::AbstractFlowStats, v::AbstractVector{<:AbstractFlowStats})
@@ -407,6 +389,51 @@ function allocate_common_fields(Nij_input, Nij_resampled, with_v;
         fft_plans_p,
     )
 end
+
+function dims_fft(u)
+    s = size(u)
+    N = ndims(u)
+    ntuple(i -> (i == 1) ? ((s[i] >> 1) + 1) : s[i], Val(N))
+end
+
+function similar_fft(u)
+    T = eltype(u)
+    similar(u, complex(T), dims_fft(u))
+end
+
+function allocate_fields(::CirculationField, data; with_ffts)
+    T = eltype(data.vs[1])
+    Γ = Array{T}(undef, data.dims_out)
+    Γ_hat = with_ffts ? similar_fft(Γ) : nothing
+    (; Γ, Γ_hat)
+end
+
+function allocate_fields(::DissipationField, data; with_ffts)
+    T = eltype(data.vs[1])
+    ε = Array{T}(undef, data.dims_out)
+    ε_hat = with_ffts ? similar_fft(ε) : nothing
+    (;
+        ε,  # loaded from file
+        ε_hat,
+
+        # Coarse-grained dissipation at a given scale (i.e. convoluted with a
+        # specific kernel).
+        # NOTE: it is *aliased* to the original dissipation ε. That's ok,
+        # because we don't need the original dissipation once its FFT has been
+        # computed.
+        ε_coarse = ε,
+    )
+end
+
+function allocate_fields(fields::Tuple, args...; kws...)
+    data = map(fields) do field
+        allocate_fields(field, args...; kws...)
+    end
+    _merge(data...)
+end
+
+_merge(t::NamedTuple, etc...) = (; t..., _merge(etc...)...)
+_merge() = NamedTuple()
 
 function load_psi_slice!(ψ::AbstractArray, ψ_in::AbstractArray, gp, slice,
                          data_params, plans, resampling_factor, to)

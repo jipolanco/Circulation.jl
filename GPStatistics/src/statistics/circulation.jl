@@ -10,10 +10,8 @@ Circulation statistics, including moments and histograms.
 """
 struct CirculationStats{
         Loops,
-        Conditioning <: AbstractConditioning,
         StatsTuple <: BaseStatsTuple,
     } <: AbstractFlowStats
-    conditioning :: Conditioning
     Nr           :: Int    # number of loop sizes
     loop_sizes   :: Loops  # vector of length Nr (can be integers or convolution kernels)
     resampling_factor :: Int
@@ -22,7 +20,7 @@ struct CirculationStats{
 end
 
 function Base.zero(s::CirculationStats)
-    CirculationStats(s.conditioning, s.Nr, s.loop_sizes, s.resampling_factor,
+    CirculationStats(s.Nr, s.loop_sizes, s.resampling_factor,
                      s.resampled_grid, zero.(s.stats))
 end
 
@@ -68,44 +66,22 @@ Construct and initialise statistics.
 """
 function CirculationStats(
         loop_sizes::AbstractArray{T} where {T <: Union{Real, AbstractKernel}},
-        stats_params::Tuple{Vararg{BaseStatsParams}},
-        conditioning = NoConditioning();
+        stats_params::Tuple{Vararg{BaseStatsParams}};
         resampling_factor=1,
         compute_in_resampled_grid=false,
     )
     resampling_factor >= 1 || error("resampling_factor must be positive")
     Nr = length(loop_sizes)
     stats = init_statistics.(stats_params, Nr)
-    CirculationStats(conditioning, Nr, loop_sizes, resampling_factor,
+    CirculationStats(Nr, loop_sizes, resampling_factor,
                      compute_in_resampled_grid, stats)
-end
-
-_allocate_fields(::AbstractConditioning, etc...) = (;)
-
-function _allocate_fields(::ConditionOnDissipation, ρ, ρ_hat)
-    ε = similar(ρ)
-    (;
-        ε,  # loaded from file
-
-        ε_hat = similar(ρ_hat),
-
-        # Coarse-grained dissipation at a given scale (i.e. convoluted with a
-        # specific kernel).
-        # NOTE: it is *aliased* to the original dissipation ε. That's ok,
-        # because we don't need the original dissipation once its FFT has been
-        # computed.
-        ε_coarse = ε,
-    )
 end
 
 function allocate_fields(::PhysicalMethod, s::CirculationStats, args...; L, kwargs...)
     data = allocate_common_fields(args...; kwargs...)
-    Γ = similar(data.ρ, data.dims_out)
-    required_fields = scalar_fields(s)
+    data_fields = allocate_fields(scalar_fields(s), data; with_ffts = false)
     (;
-        data...,
-        Γ,
-        _allocate_fields(conditioning(s), Γ)...,
+        data..., data_fields...,
         I = IntegralField2D(data.ps[1], L=L),
     )
 end
@@ -116,22 +92,21 @@ function allocate_fields(
     # Note that Γ is always computed in the resampled grid.
     # This overrides a possible `compute_in_resampled_grid` in kwargs, which
     # only applies to computation of final statistics (histograms, ...).
-    data = allocate_common_fields(args...; kwargs..., compute_in_resampled_grid = true)
+    data = allocate_common_fields(
+        args...; kwargs..., compute_in_resampled_grid = true)
     Ns = data.dims_out
     ks = map((f, n, L) -> f(n, 2π * n / L), (rfftfreq, fftfreq), Ns, L)
     Ms = length.(ks)
-    Γ = Array{Float64}(undef, Ns)
-    T = eltype(Γ)
-    Γ_hat = similar(Γ, complex(T), Ms)
+    T = Float64
     FFTW.set_num_threads(nthreads())  # make sure that FFTs are threaded
     g_hat = DiscreteFourierKernel{T}(undef, ks...)
     plan = plan_rfft(data.vs[1], flags=FFTW.MEASURE)
     plan_inv = inv(plan)
-    v_hat = map(_ -> similar(Γ_hat), data.vs)
+    v_hat = map(similar_fft, data.vs)
+    data_fields = allocate_fields(scalar_fields(s), data; with_ffts = true)
     (;
-        data..., Γ,
-        _allocate_fields(conditioning(s), Γ, Γ_hat)...,
-        Γ_hat, ks, plan, plan_inv, g_hat, v_hat,
+        data..., data_fields...,
+        ks, plan, plan_inv, g_hat, v_hat,
     )
 end
 
@@ -148,6 +123,7 @@ function compute!(
     )
     Γ = fields.Γ
     Ip = fields.I
+    fields_stats = (; Γ)
 
     # Set integral values with momentum data.
     @timeit to "prepare!" prepare!(Ip, vs)
@@ -169,7 +145,7 @@ function compute!(
         s = resampling * r  # loop size in resampled field
         @timeit to "circulation!" circulation!(
             Γ, Ip, (s, s), grid_step=grid_step)
-        @timeit to "statistics" update!(stats_t, Γ, r_ind; to=to)
+        @timeit to "statistics" update!(stats_t, fields_stats, r_ind; to=to)
     end
 
     stats_t
@@ -188,13 +164,12 @@ function compute!(
     @assert size(Γ) == size(vs[1]) "incorrect dimensions of Γ"
 
     st1 = first(stats_t)
-    cond = conditioning(st1)  # TODO remove
     with_dissipation = DissipationField() ∈ scalar_fields(st1)
 
     if with_dissipation
         @timeit to "FFT(ε)" mul!(fields.ε_hat, fields.plan, fields.ε)
         ε_coarse = fields.ε_coarse
-        Γ_stats = (; Γ, ε = ε_coarse)
+        fields_stats = (; Γ, ε = ε_coarse)
     else
         resampling = st1.resampling_factor
         Γ_stats = if resampling == 1 || st1.resampled_grid
@@ -203,6 +178,7 @@ function compute!(
             view(Γ, map(ax -> range(first(ax), last(ax), step=resampling),
                         axes(Γ))...)
         end
+        fields_stats = (; Γ = Γ_stats)
     end
 
     for (r_ind, kernel) in enumerate(st1.loop_sizes)
@@ -217,7 +193,7 @@ function compute!(
                 buf = fields.Γ_hat, plan_inv = fields.plan_inv,
             )
         end
-        @timeit to "statistics" update!(cond, stats_t, Γ_stats, r_ind; to=to)
+        @timeit to "statistics" update!(stats_t, fields_stats, r_ind; to=to)
     end
 
     stats_t

@@ -112,7 +112,8 @@ exponents(frac::Val{true}, s::Moments) =
 Base.eltype(::Type{<:Moments{T}}) where {T} = T
 Base.zero(s::Moments) = Moments(s.params, s.Nr)
 
-function update!(::NoConditioning, s::Moments, Γ, r)
+function update!(s::Moments, fields::NamedTuple, r)
+    Γ, = getfields(s, fields)
     @assert 1 <= r <= s.Nr
 
     s.Nsamples[r] += length(Γ)
@@ -157,12 +158,6 @@ function update!(::NoConditioning, s::Moments, Γ, r)
     end
 
     s
-end
-
-function update!(cond::ConditionOnDissipation, s::Moments, fields, r)
-    Γ = fields.Γ
-    ε = fields.ε
-    # TODO continue...
 end
 
 function reduce!(s::Moments, v)
