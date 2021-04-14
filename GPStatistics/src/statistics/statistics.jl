@@ -19,17 +19,46 @@ struct PhysicalMethod <: AbstractSamplingMethod end
 include("scalar_fields.jl")
 
 abstract type BaseStatsParams end
+
+scalar_fields(p::BaseStatsParams) = p.fields
+
 abstract type AbstractBaseStats end
+
+parameters(s::AbstractBaseStats) = s.params
+scalar_fields(s::AbstractBaseStats) = scalar_fields(parameters(s))
 
 include("moments.jl")
 include("histogram.jl")
 include("histogram_2D.jl")
 
+const BaseStatsTuple = Tuple{Vararg{AbstractBaseStats}}
+
+scalar_fields(stats::BaseStatsTuple) = scalar_fields(stats...)
+
+function scalar_fields(s::AbstractBaseStats, etc...)
+    fs = scalar_fields(s)
+    fs_next = scalar_fields(etc...)
+    _unique((), fs..., fs_next...)
+end
+
+function _unique(accepted, val, next...)
+    if val ∈ accepted
+        _unique(accepted, next...)
+    else
+        _unique((accepted..., val), next...)
+    end
+end
+
+_unique(accepted) = accepted
+
 abstract type AbstractFlowStats end
+
+statistics(s::AbstractFlowStats) = s.stats
 
 include("circulation.jl")
 include("velocity_increments.jl")
 
+scalar_fields(s::AbstractFlowStats) = scalar_fields(statistics(s))
 conditioning(s::AbstractFlowStats) = s.conditioning
 
 # Dictionary of statistics.
@@ -37,6 +66,8 @@ conditioning(s::AbstractFlowStats) = s.conditioning
 # regularised velocity and momentum.
 const StatsDict{S} =
     Dict{VelocityLikeFields.VelocityLikeField, S} where {S <: AbstractFlowStats}
+
+scalar_fields(s::StatsDict) = scalar_fields(first(values(s)))
 
 Broadcast.broadcastable(s::AbstractBaseStats) = Ref(s)
 
@@ -298,7 +329,7 @@ function analyse!(stats::StatsDict, orientation::Orientation, gp::ParamsGP{D},
     load_velocity = get(data_params, :load_velocity, false) :: Bool
     fields = allocate_fields(
         first(values(stats)), Nij_input, Nij_compute, with_v || with_vreg;
-        L = Lij, load_velocity = load_velocity,
+        L = Lij, load_velocity,
         compute_in_resampled_grid = resampled_grid,
     )
 
@@ -338,7 +369,10 @@ function allocate_common_fields(Nij_input, Nij_resampled, with_v;
         ψ_buf = nothing
         fft_plans_p = nothing
         fft_plans_resample = nothing
-        ρ = ones(Float64, Nij_input...)
+        ρ = nothing
+        ps = nothing
+        dims_analysed = Nij_input
+        vs = ntuple(_ -> Array{Float64}(undef, dims_analysed), 2)
     else
         ψ_in = Array{ComplexF64}(undef, Nij_input...)
         ψ = if Nij_input === Nij_resampled
@@ -346,28 +380,31 @@ function allocate_common_fields(Nij_input, Nij_resampled, with_v;
         else
             similar(ψ_in, Nij_resampled)
         end
+        dims_analysed = Nij_resampled
         ψ_buf = similar(ψ)
         ρ = similar(ψ, Float64)
+        ps = (similar(ρ), similar(ρ))  # momentum
+        vs = similar.(ps)
         fft_plans_resample = (
             fw = plan_fft!(ψ_in, flags=FFTW.MEASURE),
             bw = plan_ifft!(ψ, flags=FFTW.MEASURE),
         )
         fft_plans_p = GPFields.create_fft_plans_1d!(ψ)
     end
-    Γ_size = compute_in_resampled_grid ? Nij_resampled : Nij_input
-    ps = (similar(ρ), similar(ρ))  # momentum
-    (
-        ψ_in = ψ_in,
-        ψ = ψ,
-        ψ_buf = ψ_buf,
-        ρ = ρ,
-        dims_out = Γ_size,
-        ps = ps,
-        vs = with_v ? similar.(ps) : nothing,
+    dims_out = compute_in_resampled_grid ? Nij_resampled : Nij_input
+    (;
+        ψ_in,
+        ψ,
+        ψ_buf,
+        ρ,
+        dims_analysed,
+        dims_out,
+        ps,
+        vs,
         # FFTW plans for resampling
-        fft_plans_resample = fft_plans_resample,
+        fft_plans_resample,
         # FFTW plans for computing momentum
-        fft_plans_p = fft_plans_p,
+        fft_plans_p,
     )
 end
 
@@ -412,22 +449,21 @@ function load_dissipation_slice!(ε, gp, slice, data_params, to)
 end
 
 function analyse_slice!(
-        stats, slice, gp, F, to, data_params,
+        stats::AbstractVector{<:StatsDict}, slice, gp, F, to, data_params,
         eps_vel, resampling_factor,
         (with_p, with_vreg, with_v),
     )
     load_velocity = F.ψ === nothing
+    required_fields = scalar_fields(first(stats))
     if load_velocity
         if resampling_factor != 1
             error("resampling_factor can't be different from 1 when loading velocity field")
         end
-        gp_slice = load_velocity_slice!(F.ps, gp, slice, data_params, to)
-        if hasproperty(F, :ε)
+        gp_slice = load_velocity_slice!(F.vs, gp, slice, data_params, to)
+        if DissipationField() ∈ required_fields
             load_dissipation_slice!(F.ε, gp, slice, data_params, to)
         end
-        for p in F.ps
-            p ./= F.ρ  # this doesn't really do anything, since ρ = 1 everywhere
-        end
+        @assert isnothing(F.ρ)
     else
         gp_slice = load_psi_slice!(F.ψ, F.ψ_in, gp, slice, data_params,
                                    F.fft_plans_resample, resampling_factor, to)
@@ -459,6 +495,9 @@ function analyse_slice!(
 
     nothing
 end
+
+compute_vreg!(vs::Tuple, ps::Nothing, ρ::Nothing) = vs
+compute_velocity!(vs::Tuple, ps::Nothing, ρ::Nothing, etc...) = vs
 
 function compute_vreg!(vs::Tuple, ps::Tuple, ρ)
     @inbounds @threads for n in eachindex(ρ)

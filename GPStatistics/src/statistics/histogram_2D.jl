@@ -53,3 +53,41 @@ end
 
 Base.eltype(::Type{<:Histogram2D{T}}) where {T} = T
 Base.zero(s::Histogram2D) = Histogram2D(s.params, s.Nr)
+
+function update!(cond, s::Histogram2D, Γ, r)
+    s
+end
+
+function reduce!(s::Histogram2D, v)
+    for src in v
+        @assert s.Nr == src.Nr
+        @assert s.Nbins == src.Nbins
+        @assert s.bin_edges == src.bin_edges
+        s.H .+= src.H
+        s.Nsamples .+= src.Nsamples
+        s.vmin .= min.(s.vmin, src.vmin)
+        s.vmax .= max.(s.vmax, src.vmax)
+    end
+    s
+end
+
+function finalise!(s::Histogram2D)
+    @assert !was_finalised(s)
+    s.finalised[] = true
+    s  # nothing to do
+end
+
+function reset!(s::Histogram2D)
+    s.finalised[] = false
+    fill!(s.H, 0)
+    fill!(s.Nsamples, 0)
+    fill!(s.vmin, 0)
+    fill!(s.vmax, 0)
+    s
+end
+
+function Base.write(g, s::Histogram2D)
+    @assert was_finalised(s)
+    # TODO
+    g
+end

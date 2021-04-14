@@ -11,7 +11,7 @@ Circulation statistics, including moments and histograms.
 struct CirculationStats{
         Loops,
         Conditioning <: AbstractConditioning,
-        StatsTuple <: Tuple{Vararg{AbstractBaseStats}},
+        StatsTuple <: BaseStatsTuple,
     } <: AbstractFlowStats
     conditioning :: Conditioning
     Nr           :: Int    # number of loop sizes
@@ -26,13 +26,13 @@ function Base.zero(s::CirculationStats)
                      s.resampled_grid, zero.(s.stats))
 end
 
-@inline sampling_method(::Type{CirculationStats}, ::Type{<:Integer}) = PhysicalMethod()
-@inline sampling_method(::Type{CirculationStats}, ::Type{<:AbstractKernel}) = ConvolutionMethod()
+@inline sampling_method(::Type{CirculationStats}, ::Type{<:Integer}) =
+    PhysicalMethod()
+@inline sampling_method(::Type{CirculationStats}, ::Type{<:AbstractKernel}) =
+    ConvolutionMethod()
 @inline sampling_method(::Type{<:CirculationStats{Loops}}) where {Loops} =
     sampling_method(CirculationStats, eltype(Loops))
 @inline sampling_method(s::CirculationStats) = sampling_method(typeof(s))
-
-statistics(s::CirculationStats) = s.stats
 
 """
     CirculationStats(
@@ -101,6 +101,7 @@ end
 function allocate_fields(::PhysicalMethod, s::CirculationStats, args...; L, kwargs...)
     data = allocate_common_fields(args...; kwargs...)
     Γ = similar(data.ρ, data.dims_out)
+    required_fields = scalar_fields(s)
     (;
         data...,
         Γ,
@@ -119,14 +120,14 @@ function allocate_fields(
     Ns = data.dims_out
     ks = map((f, n, L) -> f(n, 2π * n / L), (rfftfreq, fftfreq), Ns, L)
     Ms = length.(ks)
-    Γ = similar(data.ρ, Ns)
+    Γ = Array{Float64}(undef, Ns)
     T = eltype(Γ)
     Γ_hat = similar(Γ, complex(T), Ms)
     FFTW.set_num_threads(nthreads())  # make sure that FFTs are threaded
     g_hat = DiscreteFourierKernel{T}(undef, ks...)
-    plan = plan_rfft(data.ps[1], flags=FFTW.MEASURE)
+    plan = plan_rfft(data.vs[1], flags=FFTW.MEASURE)
     plan_inv = inv(plan)
-    v_hat = map(_ -> similar(Γ_hat), data.ps)
+    v_hat = map(_ -> similar(Γ_hat), data.vs)
     (;
         data..., Γ,
         _allocate_fields(conditioning(s), Γ, Γ_hat)...,
@@ -142,7 +143,9 @@ function compute!(s::AbstractVector{S}, args...) where {S <: CirculationStats}
 end
 
 function compute!(
-        ::PhysicalMethod, stats_t::AbstractVector{<:CirculationStats}, fields, vs, to)
+        ::PhysicalMethod, stats_t::AbstractVector{<:CirculationStats},
+        fields, vs, to,
+    )
     Γ = fields.Γ
     Ip = fields.I
 
@@ -151,7 +154,7 @@ function compute!(
 
     st1 = first(stats_t)
 
-    with_dissipation = conditioning(st1) isa ConditionOnDissipation
+    with_dissipation = DissipationField() ∈ scalar_fields(st1)
     if with_dissipation
         throw(ArgumentError(
             "dissipation conditioning must be done with convolution method"
@@ -173,7 +176,9 @@ function compute!(
 end
 
 function compute!(
-        ::ConvolutionMethod, stats_t::AbstractVector{<:CirculationStats}, fields, vs, to)
+        ::ConvolutionMethod, stats_t::AbstractVector{<:CirculationStats},
+        fields, vs, to,
+    )
     Γ = fields.Γ
     g_hat = fields.g_hat
     v_hat = fields.v_hat
@@ -183,8 +188,8 @@ function compute!(
     @assert size(Γ) == size(vs[1]) "incorrect dimensions of Γ"
 
     st1 = first(stats_t)
-    cond = conditioning(st1)
-    with_dissipation = cond isa ConditionOnDissipation
+    cond = conditioning(st1)  # TODO remove
+    with_dissipation = DissipationField() ∈ scalar_fields(st1)
 
     if with_dissipation
         @timeit to "FFT(ε)" mul!(fields.ε_hat, fields.plan, fields.ε)
