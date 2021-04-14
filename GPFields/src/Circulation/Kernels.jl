@@ -6,7 +6,7 @@ Different kernels correspond to different loop shapes (e.g. rectangular, circula
 module Kernels
 
 export EllipsoidalKernel, RectangularKernel, DiscreteFourierKernel
-export materialise!, lengthscales
+export materialise!, lengthscales, kernel
 
 using Base.Threads
 using SpecialFunctions: besselj1
@@ -114,20 +114,28 @@ Represents a convolution kernel matrix materialised in Fourier space.
 Construct uninitialised kernel matrix in Fourier space, for the given wave
 numbers `(kx, ky)`.
 """
-struct DiscreteFourierKernel{T, WaveNumbers}
+struct DiscreteFourierKernel{
+        T, WaveNumbers,
+        Kernel <: Union{Nothing, AbstractKernel},
+    }
     mat :: Array{T,2}
     ks  :: NTuple{2,WaveNumbers}
     buf :: Vector{T}
-    function DiscreteFourierKernel{T}(init, ks...) where {T}
-        Ns = length.(ks)
-        mat = Array{T}(init, Ns)
-        buf = Vector{T}(undef, 0)
-        WaveNumbers = typeof(first(ks))
-        new{T,WaveNumbers}(mat, ks, buf)
-    end
+    kernel :: Kernel
+end
+
+function DiscreteFourierKernel{T}(init, ks...; kernel = nothing) where {T}
+    Ns = length.(ks)
+    mat = Array{T}(init, Ns)
+    buf = Vector{T}(undef, 0)
+    WaveNumbers = typeof(first(ks))
+    DiscreteFourierKernel(mat, ks, buf, kernel)
 end
 
 DiscreteFourierKernel{T}(init, ks) where {T} = DiscreteFourierKernel{T}(init, ks...)
+
+DiscreteFourierKernel(g::DiscreteFourierKernel, kernel::AbstractKernel) =
+    DiscreteFourierKernel(g.mat, g.ks, g.buf, kernel)
 
 """
     DiscreteFourierKernel{T}(kernel::AbstractKernel, (kx, ky))
@@ -146,6 +154,15 @@ DiscreteFourierKernel(kernel::AbstractKernel, ks, ::Type{T} = Float64) where {T}
 
 wavenumbers(u::DiscreteFourierKernel) = u.ks
 data(u::DiscreteFourierKernel) = u.mat
+kernel(u::DiscreteFourierKernel) = u.kernel
+
+function kernel_check(u::DiscreteFourierKernel)
+    ker = kernel(u)
+    isnothing(ker) && error("DiscreteFourierKernel has no attached kernel")
+    ker
+end
+
+area(u::DiscreteFourierKernel) = area(kernel_check(u))
 
 """
     materialise!(u::DiscreteFourierKernel, kernel::AbstractKernel)
@@ -171,7 +188,7 @@ function materialise!(kf::DiscreteFourierKernel, g::RectangularKernel)
         u[I] = A * prod(sxy)
     end
 
-    kf
+    DiscreteFourierKernel(kf, g)
 end
 
 function _eval_sincs!(buf, ks, Rs)
@@ -207,7 +224,7 @@ function materialise!(kf::DiscreteFourierKernel, g::EllipsoidalKernel)
         kr = sqrt(sum(abs2, kvec .* Rs))  # = √[(kx * rx / Lx)^2 + (ky * ry / Ly)^2]
         u[I] = A * J1norm(kr)
     end
-    kf
+    DiscreteFourierKernel(kf, g)
 end
 
 """
