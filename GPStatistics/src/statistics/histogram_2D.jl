@@ -128,8 +128,14 @@ function Base.write(g, s::Histogram2D)
 
     # Write compressed histogram (compression ratio can be huge!)
     hist = s.H
-    chunks = ntuple(i -> (i ≤ Nfields) ? size(hist, i) : 1, ndims(hist))
-    g["hist", chunk=chunks, compress=6] = hist
+    _write_histogram_chunked(g, hist, "hist")
 
     g
+end
+
+function _write_histogram_chunked(g, hist, name)
+    s = size(hist)
+    N = ndims(hist)
+    chunk = ntuple(i -> i == N ? 1 : s[i], N)  # chunk along last dimension
+    g[name, chunk = chunk, compress = 6] = hist
 end
