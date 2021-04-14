@@ -63,12 +63,12 @@ function main()
         which = (VelocityLikeFields.Velocity, ),
     )
 
-    analyse!(stats, gp, data_params; to)
+    analyse!(stats, gp, data_params; to, max_slices = 1)
 
     reset_timer!(to)
     reset!(stats)
 
-    analyse!(stats, gp, data_params; to)
+    analyse!(stats, gp, data_params; to, max_slices = circulation.max_slices)
 
     println(to)
 
