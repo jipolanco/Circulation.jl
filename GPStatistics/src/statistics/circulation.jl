@@ -188,10 +188,12 @@ function compute!(
             buf = fields.Γ_hat, plan_inv = fields.plan_inv,
         )
         if with_dissipation
+            Ainv = inv(Kernels.area(kernel))
             @timeit to "convolve dissipation" convolve!(
                 ε_coarse, fields.ε_hat, g_hat;
                 buf = fields.Γ_hat, plan_inv = fields.plan_inv,
             )
+            @timeit to "divide ε by area" ε_coarse .*= Ainv
         end
         @timeit to "statistics" update!(stats_t, fields_stats, r_ind; to=to)
     end
