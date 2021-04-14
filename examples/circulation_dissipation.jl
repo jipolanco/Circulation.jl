@@ -72,6 +72,18 @@ function main()
 
     println(to)
 
+    write_results(output.statistics, stats, gp)
+
+    nothing
+end
+
+function write_results(outfile, stats, gp)
+    mkpath(dirname(outfile))
+    @info "Saving $(outfile)"
+    h5open(outfile, "w") do ff
+        write(create_group(ff, "SimParams"), gp)
+        write(create_group(ff, "Statistics"), stats)
+    end
     nothing
 end
 

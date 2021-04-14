@@ -38,13 +38,15 @@ struct Histogram2D{
 
     function Histogram2D(p::ParamsHistogram2D{T}, Nr::Integer) where {T}
         edges = p.bin_edges
+        Nfields = length(edges)
+        @assert Nfields == 2
         Nbins = length.(edges) .- 1
         Nsamples = zeros(Int, Nr)
         BinType = typeof(edges)
         H = zeros(T, Nbins..., Nr)
         Tb = promote_type(eltype.(edges)...)
-        vmin = zeros(Tb, length(edges), Nr)
-        vmax = zeros(Tb, length(edges), Nr)
+        vmin = zeros(Tb, Nfields, Nr)
+        vmax = zeros(Tb, Nfields, Nr)
         new{T, Tb, BinType, typeof(p)}(
             p, Ref(false), Nr, Nbins, edges, H, vmin, vmax, Nsamples,
         )
@@ -55,7 +57,30 @@ Base.eltype(::Type{<:Histogram2D{T}}) where {T} = T
 Base.zero(s::Histogram2D) = Histogram2D(s.params, s.Nr)
 
 function update!(s::Histogram2D, fields::NamedTuple, r)
-    u, v = getfields(s, fields)
+    fs = getfields(s, fields)  # for instance Γ and ε
+    us, vs = fs
+    @assert 1 <= r <= s.Nr
+    @assert length(us) == length(vs)
+    Nes = map(length, s.bin_edges)
+
+    s.Nsamples[r] += length(us)
+
+    vmins = @view s.vmin[:, r]
+    vmaxs = @view s.vmax[:, r]
+
+    @inbounds for n in eachindex(us)
+        uv = getindex.(fs, n)
+        for l ∈ eachindex(uv)
+            vmins[l] = min(vmins[l], uv[l])
+            vmaxs[l] = max(vmins[l], uv[l])
+        end
+        is = map(searchsortedlast, s.bin_edges, uv)
+        within_bounds = all(map((i, Ne) -> i ∉ (0, Ne), is, Nes))
+        if within_bounds
+            s.H[is..., r] += 1
+        end
+    end
+
     s
 end
 
@@ -89,6 +114,22 @@ end
 
 function Base.write(g, s::Histogram2D)
     @assert was_finalised(s)
-    # TODO
+
+    for i ∈ eachindex(s.bin_edges)
+        g["bin_edges$i"] = collect(s.bin_edges[i])
+    end
+
+    g["total_samples"] = s.Nsamples
+
+    g["minimum"] = s.vmin
+    g["maximum"] = s.vmax
+
+    Nfields = length(s.bin_edges)
+
+    # Write compressed histogram (compression ratio can be huge!)
+    hist = s.H
+    chunks = ntuple(i -> (i ≤ Nfields) ? size(hist, i) : 1, ndims(hist))
+    g["hist", chunk=chunks, compress=6] = hist
+
     g
 end

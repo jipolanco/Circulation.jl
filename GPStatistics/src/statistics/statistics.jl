@@ -309,14 +309,14 @@ function analyse!(stats::StatsDict, orientation::Orientation, gp::ParamsGP{D},
 
     # Allocate arrays.
     load_velocity = get(data_params, :load_velocity, false) :: Bool
-    fields = allocate_fields(
+    @timeit to "allocate fields" fields = allocate_fields(
         first(values(stats)), Nij_input, Nij_compute, with_v || with_vreg;
         L = Lij, load_velocity,
         compute_in_resampled_grid = resampled_grid,
     )
 
     Nth = nthreads()
-    stats_t = [zero(stats) for t = 1:Nth]
+    @timeit to "init stats per thread" stats_t = [zero(stats) for t = 1:Nth]
 
     slices = 1:Nslices
 
