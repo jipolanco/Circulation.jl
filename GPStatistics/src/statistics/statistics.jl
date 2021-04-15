@@ -191,10 +191,21 @@ Base.write(h5filename::AbstractString, stats::StatsDict) =
 function Base.write(ff::Union{HDF5.File,HDF5.Group}, stats::StatsDict)
     for (k, v) in stats
         g = create_group(ff, string(k))
+        write_field_metadata(g, scalar_fields(v))
         write(g, v)
         close(g)
     end
     ff
+end
+
+function write_field_metadata(gparent, fields)
+    gmeta = create_group(gparent, "FieldMetadata")
+    map(fields) do field
+        gname = string(nameof(typeof(field)))
+        g = create_group(gmeta, gname)
+        g["divided_by_area"] = divide_by_area(field)
+    end
+    nothing
 end
 
 """

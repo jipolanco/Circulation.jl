@@ -137,6 +137,11 @@ function compute!(
         ))
     end
 
+    circ = find_field(CirculationField, scalar_fields(st1))
+    if divide_by_area(circ)
+        error("cannot divide by area in PhysicalMethod")
+    end
+
     resampling = st1.resampling_factor
     grid_step = st1.resampled_grid ? 1 : resampling
     @assert grid_step .* size(Γ) == size(vs[1]) "incorrect dimensions of Γ"
@@ -166,6 +171,9 @@ function compute!(
     st1 = first(stats_t)
     with_dissipation = DissipationField() ∈ scalar_fields(st1)
 
+    circ = find_field(CirculationField, scalar_fields(st1))
+    @assert !isnothing(circ)
+
     if with_dissipation
         @timeit to "FFT(ε)" mul!(fields.ε_hat, fields.plan, fields.ε)
         ε_coarse = fields.ε_coarse
@@ -187,8 +195,11 @@ function compute!(
             Γ, v_hat, g_hat;
             buf = fields.Γ_hat, plan_inv = fields.plan_inv,
         )
+        Ainv = inv(Kernels.area(kernel))
+        if divide_by_area(circ)
+            @timeit to "divide Γ by area" Γ .*= Ainv
+        end
         if with_dissipation
-            Ainv = inv(Kernels.area(kernel))
             @timeit to "convolve dissipation" convolve!(
                 ε_coarse, fields.ε_hat, g_hat;
                 buf = fields.Γ_hat, plan_inv = fields.plan_inv,

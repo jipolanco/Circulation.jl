@@ -33,18 +33,30 @@ function main()
         statistics = "tgtest_circulation.h5",
     )
 
-    circulation_bins = range(-50, 50; step = 0.1)
-    dissipation_bins = range(0, 50; step = 0.1)
 
-    circulation = (;
-        max_slices = nothing,
-        stats_params = (
-            ParamsHistogram2D(
-                Int64, (CirculationField(), DissipationField());
-                bin_edges = (circulation_bins, dissipation_bins),
-            ),
+    circulation = let
+        fields = (
+            # If divide_by_area = true, we actually compute statistics of Γ / A,
+            # which has units of vorticity (and tends to ω when A → 0).
+            # This is more consistent with the coarse-grained dissipation field,
+            # which is also an area integral normalised by the loop area.
+            CirculationField(divide_by_area = true),
+            DissipationField(),
         )
-    )
+        bin_edges = (
+            # Circulation bins.
+            # NOTE: since we set divide_by_area = true, the limits should be
+            # roughly the extrema of vorticity in the domain.
+            range(-50, 50; step = 0.1),
+            range(0, 50; step = 0.1),
+        )
+        (;
+            max_slices = nothing,
+            stats_params = (
+                ParamsHistogram2D(Int64, fields; bin_edges),
+            )
+        )
+    end
 
     # ============================================================ #
 
