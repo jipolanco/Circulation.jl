@@ -43,12 +43,14 @@ function main()
             CirculationField(divide_by_area = true),
             DissipationField(),
         )
+        ω_max = 5   # estimation of maximum vorticity, for circulation bins
+        ε_max = 50  # same for dissipation
         bin_edges = (
             # Circulation bins.
             # NOTE: since we set divide_by_area = true, the limits should be
             # roughly the extrema of vorticity in the domain.
-            range(-50, 50; step = 0.1),
-            range(0, 50; step = 0.1),
+            range(-1, 1; length = 201) .* ω_max,
+            range(0, 1; length = 101) .* ε_max,
         )
         (;
             max_slices = nothing,
