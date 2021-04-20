@@ -15,7 +15,7 @@ function make_dissipation_intervals(εs; join = 50)
 end
 
 # PDFs of Γ_r conditioned on ε_r
-function conditional_pdfs(εs_all, hist_orig)
+function conditional_pdfs_ε(εs_all, hist_orig)
     @assert ndims(hist_orig) == 3
     εs = make_dissipation_intervals(εs_all)
     dims = (size(hist_orig, 1), length(εs))
@@ -40,17 +40,62 @@ function conditional_pdfs(εs_all, hist_orig)
     )
 end
 
-function load_histograms(g)
-    hist = g["hist"][:, :, :] :: Array{Int,3}
-    minima = g["minimum"][:, :] :: Array{Float64,2}
+# PDFs of Γ_r conditioned on ε_r * A
+# This doesn't give very good results, because the Γ bins are resampled...
+function conditional_pdfs_εA(As, εs, ωs, εA_kolmogorov, hist_orig; ν)
+    εAs = range(0, 10εA_kolmogorov; length = 101)
+    Γs = range(-1, 1; length = 1001) .* 10ν
+    Nx = length(Γs) - 1
+    Ny = length(εAs) - 1
+    hist = zeros(eltype(hist_orig), Nx, Ny)
+    @inbounds for k ∈ axes(hist_orig, 3), j ∈ axes(hist_orig, 2)
+        A = As[k]
+        εA = εs[j] * A
+        jj = searchsortedlast(εAs, εA)
+        if jj ∈ (0, Ny + 1)
+            continue
+        end
+        for i ∈ axes(hist_orig, 1)
+            Γ = A * ωs[i]
+            ii = searchsortedlast(Γs, Γ)
+            if ii ∉ (0, Nx + 1)
+                hist[ii, jj] += hist_orig[i, j, k]
+            end
+        end
+    end
+    hist_εA = partial_sum(hist; dims = 1)
+    # @show hist_εA  # show number of events for each interval
+    pdf = similar(hist, Float32)
+    for (I, val) in pairs(IndexCartesian(), hist)
+        j = Tuple(I)[2]
+        pdf[I] = val / hist_εA[j]
+    end
+    (;
+        εAs,
+        Γs,
+        cond_pdf_Γ = pdf,
+    )
+end
+
+function load_histograms(g, As; params)
+    hist = g["hist"][:, :, :] :: Array{Int,3}        # (Γ, ε, r)
+    minima = g["minimum"][:, :] :: Array{Float64,2}  # (Γ, ε)
     maxima = g["maximum"][:, :] :: Array{Float64,2}
+
+    @show minima[1, :] .* As
+    @show maxima[1, :] .* As
+
+    # This is actually Γ / A (→ Γ bins vary with loop size!!)
     bins_Γ = g["bin_edges1"][:] :: Vector{Float64}
+
     bins_ε = g["bin_edges2"][:] :: Vector{Float64}
     samples = g["total_samples"][:] :: Vector{Int}
+
     hist_Γ = partial_sum(hist; dims = 2)
     hist_ε = partial_sum(hist; dims = 1)
     totals = partial_sum(hist_Γ; dims = 1)
-    conditional = conditional_pdfs(bins_ε, hist)
+
+    # conditional_ε = conditional_pdfs_ε(bins_ε, hist)
 
     # Check that (almost) all samples are in the PDFs
     @assert isapprox(totals, samples; rtol=1e-4)
@@ -61,7 +106,16 @@ function load_histograms(g)
     end
     @show ε_mean
 
-    (; hist, hist_Γ, hist_ε, minima, maxima, bins_Γ, bins_ε, samples, conditional,
+    η = params.η
+    ν = params.ν
+    εA_kolmogorov = ε_mean * η^2  # used to define εA bins
+    conditional_εA = conditional_pdfs_εA(
+        As, bins_ε, bins_Γ, εA_kolmogorov, hist; ν,
+    )
+
+    (; hist, hist_Γ, hist_ε, minima, maxima, bins_Γ, bins_ε, samples,
+        # conditional_ε,
+        conditional_εA,
         ε_mean,
     )
 end
@@ -87,22 +141,37 @@ function mappable_colour(cmap, inds::AbstractVector)
     mappable_colour(cmap, first(r), last(r))
 end
 
-function load_stats(g)
-    histograms = load_histograms(g["Histogram2D"])
+function load_stats(g, params)
     rs = g["kernel_size"][:] :: Vector{Float64}
     As = g["kernel_area"][:] :: Vector{Float64}
     @assert As ≈ rs.^2
-    η = 0.00245  # from DNS
-    Lbox = 2π
-    @show Lbox / η
+    Lbox = params.Ls[1]
+    Δx = Lbox / params.Ns[1]
+    η = params.η
+    @show Lbox / η, Δx / η
     rs_η = rs ./ η
     As_η = As ./ η^2
-    (; rs, As, rs_η, As_η, η, histograms)
+    let g = open_group(g, "FieldMetadata")
+        @assert read(g["CirculationField/divided_by_area"]) == true
+        @assert read(g["DissipationField/divided_by_area"]) == true
+    end
+    histograms = load_histograms(g["Histogram2D"], As; params)
+    (; rs, As, rs_η, As_η, L = Lbox, η, histograms)
+end
+
+function load_simulation_params(g)
+    (
+        Ns = Tuple(g["dims"][:]) :: NTuple{3,Int},
+        Ls = Tuple(g["L"][:]) :: NTuple{3,Float64},
+        η = 0.00245,  # from DNS
+        ν = 5e-5,
+    )
 end
 
 function load_data(ff::HDF5.File)
-    stats = load_stats(ff["Statistics/Velocity"])
-    (; stats)
+    params = load_simulation_params(ff["SimParams"])
+    stats = load_stats(ff["Statistics/Velocity"], params)
+    (; params, stats)
 end
 
 function plot_pdf_2D!(ax, stats; r)
@@ -175,41 +244,46 @@ function plot_pdf_Γr!(ax, stats)
     ax
 end
 
-function plot_condpdf_Γε!(ax, stats)
+function plot_condpdf_Γ_εA!(ax, stats)
     histograms = stats.histograms
-    conditional = histograms.conditional
+    conditional = histograms.conditional_εA
+    η = stats.η
+    ε_mean = histograms.ε_mean
+    εA_norm = η^2 * ε_mean
 
     pdfs = conditional.cond_pdf_Γ
-    εs = conditional.εs
+    εAs = conditional.εAs
 
     ax.set_yscale(:log)
-    ax.set_xlim(-20, 20)
-    ax.set_ylim(1e-6, 1)
-    ax.set_xlabel(L"ω_r / \left\langle ω_r^2 | ε_r \right\rangle^{1/2}")
-    ax.set_ylabel(L"P(ω_r | ε_r)")
+    # ax.set_xlim(-40, 40)
+    # ax.set_ylim(1e-6, 1)
+    # ax.set_xlabel(L"ω_r / \left\langle ω_r^2 | ε_r \right\rangle^{1/2}")
+    # ax.set_ylabel(L"P(ω_r | ε_r)")
 
-    ε_indices = eachindex(εs)[1:end-1]
-    max_ε = 9
-    cmap = mappable_colour(plt.cm.cividis_r, 0, max_ε)
+    εA_indices = eachindex(εAs)[5:5:end]
+    Ncurves = length(εA_indices)
+    cmap = mappable_colour(plt.cm.cividis_r, 0, 1)
 
-    for j in ε_indices
+    for j in εA_indices
         pdf = pdfs[:, j]
-        xs = histograms.bins_Γ
+        xs = conditional.Γs
 
-        ε_label = round.((εs[j], εs[j + 1]) ./ histograms.ε_mean, digits=2)
-        ε_label[1] > max_ε && continue
+        εA_nominal = round.((εAs[j], εAs[j + 1]) ./ εA_norm, digits=4)
 
-        color = cmap(ε_label[1])
+        # ε_label = round.((εs[j], εs[j + 1]) ./ histograms.ε_mean, digits=2)
+        # ε_label[1] > max_ε && continue
+        # color = cmap(ε_label[1])
+        color = cmap((j - 1) / (Ncurves - 1))
 
-        xrms = sqrt(variance(xs, pdf))
-        pdf .*= xrms
-        xs ./= xrms
+        # xrms = sqrt(variance(xs, pdf))
+        # pdf .*= xrms
+        # xs ./= xrms
 
         xs_centre = @views (xs[1:end-1] .+ xs[2:end]) ./ 2
         ax.plot(
             xs_centre, pdf;
             marker = ".", color,
-            label = ε_label,
+            label = εA_nominal,
             # label = latexstring("$r_η"),
         )
     end
@@ -278,9 +352,9 @@ let
         # ax.legend()
     end
     let ax = axes[3]
-        plot_condpdf_Γε!(ax, stats)
+        plot_condpdf_Γ_εA!(ax, stats)
         ax.legend(
-            title = L"ε_r / \langle ε \rangle", fontsize = "x-small",
+            title = L"ε_r r^2 / \langle ε \rangle η^2", fontsize = "x-small",
             framealpha = 0.5,
         )
     end
