@@ -1,4 +1,5 @@
-# Compute circulation statistics conditioned on scale-averaged dissipation.
+# Compute circulation statistics conditioned on scale-averaged dissipation
+# (actually on ε * A).
 #
 # Uses example data from Taylor-Green vortex (tgtest_data).
 
@@ -33,24 +34,21 @@ function main()
         statistics = "tgtest_circulation.h5",
     )
 
-
     circulation = let
         fields = (
-            # If divide_by_area = true, we actually compute statistics of Γ / A,
-            # which has units of vorticity (and tends to ω when A → 0).
-            # This is more consistent with the coarse-grained dissipation field,
-            # which is also an area integral normalised by the loop area.
-            CirculationField(divide_by_area = true),
-            DissipationField(),
+            CirculationField(divide_by_area = false),
+            DissipationField(divide_by_area = false),  # this is actually A * ε_r
         )
-        ω_max = 5   # estimation of maximum vorticity, for circulation bins
-        ε_max = 50  # same for dissipation
+        L = π
+        U = 1  # typical large-scale velocity
+        Γ_max = 4L * U
+
+        ε_mean = 0.1  # put here estimation from DNS...
+        εA_max = ε_mean * L^2
+
         bin_edges = (
-            # Circulation bins.
-            # NOTE: since we set divide_by_area = true, the limits should be
-            # roughly the extrema of vorticity in the domain.
-            range(-1, 1; length = 201) .* ω_max,
-            range(0, 1; length = 101) .* ε_max,
+            range(-1, 1; length = 201) .* Γ_max,
+            range(0, 1; length = 101) .* εA_max,
         )
         (;
             max_slices = nothing,

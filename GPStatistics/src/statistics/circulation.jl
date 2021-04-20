@@ -171,8 +171,10 @@ function compute!(
     st1 = first(stats_t)
     with_dissipation = DissipationField() ∈ scalar_fields(st1)
 
-    circ = find_field(CirculationField, scalar_fields(st1))
-    @assert !isnothing(circ)
+    field_Γ = find_field(CirculationField, scalar_fields(st1))
+    field_ε = find_field(DissipationField, scalar_fields(st1))
+    @assert !isnothing(field_Γ)
+    @assert isnothing(field_ε) == !with_dissipation
 
     if with_dissipation
         @timeit to "FFT(ε)" mul!(fields.ε_hat, fields.plan, fields.ε)
@@ -196,7 +198,7 @@ function compute!(
             buf = fields.Γ_hat, plan_inv = fields.plan_inv,
         )
         Ainv = inv(Kernels.area(kernel))
-        if divide_by_area(circ)
+        if divide_by_area(field_Γ)
             @timeit to "divide Γ by area" Γ .*= Ainv
         end
         if with_dissipation
@@ -204,7 +206,9 @@ function compute!(
                 ε_coarse, fields.ε_hat, g_hat;
                 buf = fields.Γ_hat, plan_inv = fields.plan_inv,
             )
-            @timeit to "divide ε by area" ε_coarse .*= Ainv
+            if divide_by_area(field_ε)
+                @timeit to "divide ε by area" ε_coarse .*= Ainv
+            end
         end
         @timeit to "statistics" update!(stats_t, fields_stats, r_ind; to=to)
     end
