@@ -53,7 +53,7 @@ function main()
         (;
             max_slices = nothing,
             stats_params = (
-                ParamsHistogram2D(Int64, fields; bin_edges),
+                ParamsHistogram2D(Int64, fields; bin_edges, merge_scales = true),
             )
         )
     end

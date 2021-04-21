@@ -8,9 +8,14 @@ struct ParamsHistogram2D{
 
     fields    :: Fields
     bin_edges :: Edges
+    merge_scales :: Bool  # merge scale-wise statistics?
 
-    ParamsHistogram2D(::Type{T}, fields; bin_edges) where {T} =
-        new{T, typeof(fields), typeof(bin_edges)}(fields, bin_edges)
+    function ParamsHistogram2D(
+            ::Type{T}, fields;
+            bin_edges, merge_scales = false,
+        ) where {T}
+        new{T, typeof(fields), typeof(bin_edges)}(fields, bin_edges, merge_scales)
+    end
 end
 
 ParamsHistogram2D(fields; kws...) = ParamsHistogram2D(Int64, fields; kws...)
@@ -37,6 +42,9 @@ struct Histogram2D{
     Nsamples :: Vector{Int}
 
     function Histogram2D(p::ParamsHistogram2D{T}, Nr::Integer) where {T}
+        if p.merge_scales
+            Nr = one(Nr)
+        end
         edges = p.bin_edges
         Nfields = length(edges)
         @assert Nfields == 2
@@ -57,6 +65,11 @@ Base.eltype(::Type{<:Histogram2D{T}}) where {T} = T
 Base.zero(s::Histogram2D) = Histogram2D(s.params, s.Nr)
 
 function update!(s::Histogram2D, fields::NamedTuple, r)
+    if s.params.merge_scales
+        @assert s.Nr == 1
+        r = one(r)
+    end
+
     fs = getfields(s, fields)  # for instance Γ and ε
     us, vs = fs
     @assert 1 <= r <= s.Nr
@@ -114,12 +127,14 @@ end
 
 function Base.write(g, s::Histogram2D)
     @assert was_finalised(s)
+    merge_scales = s.params.merge_scales
 
     for i ∈ eachindex(s.bin_edges)
         g["bin_edges$i"] = collect(s.bin_edges[i])
     end
 
     g["total_samples"] = s.Nsamples
+    g["merged_scales"] = merge_scales
 
     g["minimum"] = s.vmin
     g["maximum"] = s.vmax
