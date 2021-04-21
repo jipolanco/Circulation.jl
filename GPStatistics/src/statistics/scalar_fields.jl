@@ -13,11 +13,12 @@ divide_by_area(::CirculationField{D}) where {D} = D
 Base.fieldname(::CirculationField) = :Γ
 
 struct DissipationField{divide_by_area} <: AbstractScalarField
-    @inline CirculationField(; divide_by_area::Bool = true) =
+    @inline DissipationField(; divide_by_area::Bool = true) =
         new{divide_by_area}()
 end
-Base.fieldname(::DissipationField) = :ε
+
 divide_by_area(::DissipationField{D}) where {D} = D
+Base.fieldname(::DissipationField) = :ε
 
 function find_field(
         ::Type{F},

@@ -130,7 +130,8 @@ function compute!(
 
     st1 = first(stats_t)
 
-    with_dissipation = DissipationField() ∈ scalar_fields(st1)
+    field_ε = find_field(DissipationField, scalar_fields(st1))
+    with_dissipation = !isnothing(field_ε)
     if with_dissipation
         throw(ArgumentError(
             "dissipation conditioning must be done with convolution method"
@@ -169,12 +170,11 @@ function compute!(
     @assert size(Γ) == size(vs[1]) "incorrect dimensions of Γ"
 
     st1 = first(stats_t)
-    with_dissipation = DissipationField() ∈ scalar_fields(st1)
 
     field_Γ = find_field(CirculationField, scalar_fields(st1))
     field_ε = find_field(DissipationField, scalar_fields(st1))
+    with_dissipation = !isnothing(field_ε)
     @assert !isnothing(field_Γ)
-    @assert isnothing(field_ε) == !with_dissipation
 
     if with_dissipation
         @timeit to "FFT(ε)" mul!(fields.ε_hat, fields.plan, fields.ε)

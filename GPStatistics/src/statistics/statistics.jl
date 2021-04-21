@@ -498,7 +498,7 @@ function analyse_slice!(
             error("resampling_factor can't be different from 1 when loading velocity field")
         end
         gp_slice = load_velocity_slice!(F.vs, gp, slice, data_params, to)
-        if DissipationField() ∈ required_fields
+        if !isnothing(find_field(DissipationField, required_fields))
             load_dissipation_slice!(F.ε, gp, slice, data_params, to)
         end
         @assert isnothing(F.ρ)
