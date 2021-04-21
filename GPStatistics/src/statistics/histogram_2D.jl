@@ -6,15 +6,18 @@ struct ParamsHistogram2D{
         Edges  <: Tuple{Vararg{AbstractVector,2}},
     } <: BaseStatsParams
 
+    label     :: String
     fields    :: Fields
     bin_edges :: Edges
     merge_scales :: Bool  # merge scale-wise statistics?
 
     function ParamsHistogram2D(
             ::Type{T}, fields;
-            bin_edges, merge_scales = false,
+            bin_edges, merge_scales = false, label = "Histogram2D",
         ) where {T}
-        new{T, typeof(fields), typeof(bin_edges)}(fields, bin_edges, merge_scales)
+        new{T, typeof(fields), typeof(bin_edges)}(
+            label, fields, bin_edges, merge_scales,
+        )
     end
 end
 

@@ -14,10 +14,12 @@ include("scalar_fields.jl")
 abstract type BaseStatsParams end
 
 scalar_fields(p::BaseStatsParams) = p.fields
+label(p::BaseStatsParams) = p.label
 
 abstract type AbstractBaseStats end
 
 parameters(s::AbstractBaseStats) = s.params
+label(s::AbstractBaseStats) = label(parameters(s))
 scalar_fields(s::AbstractBaseStats) = scalar_fields(parameters(s))
 
 function getfields(s::AbstractBaseStats, fields)

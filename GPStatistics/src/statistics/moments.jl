@@ -6,13 +6,19 @@ struct ParamsMoments{
         F <: Union{Nothing, Int},
     } <: BaseStatsParams
 
+    label      :: String
     fields     :: Fields
     integer    :: Int  # number of integer moments to compute (should be even)
     fractional :: F    # number of fractional moments to compute
 
-    function ParamsMoments(::Type{T}, field; integer, fractional = nothing) where {T}
+    function ParamsMoments(
+            ::Type{T}, field;
+            integer, fractional = nothing, label = "Moments",
+        ) where {T}
         fields = (field,)
-        new{T, typeof(fields), typeof(fractional)}(fields, integer, fractional)
+        new{T, typeof(fields), typeof(fractional)}(
+            label, fields, integer, fractional,
+        )
     end
 end
 

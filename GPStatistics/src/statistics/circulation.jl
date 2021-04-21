@@ -227,7 +227,7 @@ function Base.write(g::Union{HDF5.File,HDF5.Group}, stats::CirculationStats)
 end
 
 function _write_stats_group(g, s::AbstractBaseStats)
-    name = string(nameof(typeof(s)))
+    name = label(s)
     gg = create_group(g, name)
     write(gg, s)
     g

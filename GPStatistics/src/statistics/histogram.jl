@@ -6,12 +6,15 @@ struct ParamsHistogram{
         Edges <: AbstractVector,
     } <: BaseStatsParams
 
+    label     :: String
     fields    :: Fields
     bin_edges :: Edges
 
-    function ParamsHistogram(::Type{T}, field; bin_edges) where {T}
+    function ParamsHistogram(
+            ::Type{T}, field; bin_edges, label = "Histogram",
+        ) where {T}
         fields = (field,)
-        new{T, typeof(fields), typeof(bin_edges)}(fields, bin_edges)
+        new{T, typeof(fields), typeof(bin_edges)}(label, fields, bin_edges)
     end
 end
 
