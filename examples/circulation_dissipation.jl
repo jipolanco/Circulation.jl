@@ -36,16 +36,27 @@ function main()
     )
 
     circulation = let
-        fields = (
-            CirculationField(divide_by_area = false),
-            # This is actually A * ε_r:
-            DissipationField(divide_by_area = false, inplane_only = true, ν = ν),
-        )
+        field_Γ = CirculationField(divide_by_area = false)
+
+        # This is actually A * ε_r:
+        # field_ε = DissipationField(
+        #     divide_by_area = false, inplane_only = true, ν = ν,
+        # )
+
+        # This is actually A * Ω_r:
+        field_ε = EnstrophyField(divide_by_area = false)
+
+        fields = (field_Γ, field_ε)
+
         L = π
         U = 1  # typical large-scale velocity
         Γ_max = 4L * U
 
         ε_mean = 0.1  # put here estimation from DNS...
+        if field_ε isa EnstrophyField
+            ε_mean /= 2ν  # this is actually the mean enstrophy: ε = 2νΩ
+        end
+
         εA_max = ε_mean * L^2
 
         bin_edges = (

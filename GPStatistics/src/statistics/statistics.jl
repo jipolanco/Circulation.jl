@@ -423,7 +423,7 @@ function allocate_fields(::CirculationField, data; with_ffts)
     (; Γ, Γ_hat)
 end
 
-function allocate_fields(::DissipationField, data; with_ffts)
+function allocate_fields(::DissipationLikeField, data; with_ffts)
     T = eltype(data.vs[1])
     ε = Array{T}(undef, data.dims_out)
     ε_hat = with_ffts ? similar_fft(ε) : nothing
@@ -502,14 +502,16 @@ function analyse_slice!(
             error("resampling_factor can't be different from 1 when loading velocity field")
         end
         gp_slice = load_velocity_slice!(F.vs, gp, slice, data_params, to)
-        field_ε = find_field(DissipationField, required_fields)
+        field_ε = find_field(DissipationLikeField, required_fields)
         if !isnothing(field_ε)
             if compute_inplane(field_ε)
                 # We do nothing for now: ε is computed from velocity field,
                 # after the latter has been transformed to Fourier space.
                 # (!! Only works for circulation statistics with ConvolutionMethod).
-            else
+            elseif field_ε isa DissipationField
                 load_dissipation_slice!(F.ε, gp, slice, data_params, to)
+            else
+                error("cannot load 3D $field_ε from file")
             end
         end
         @assert isnothing(F.ρ)

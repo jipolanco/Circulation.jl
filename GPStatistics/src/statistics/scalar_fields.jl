@@ -1,4 +1,4 @@
-export CirculationField, DissipationField
+export CirculationField, DissipationField, EnstrophyField
 
 using LinearAlgebra: ldiv!
 
@@ -20,7 +20,10 @@ metadata(f::CirculationField) = (
     "divided_by_area" => divide_by_area(f),
 )
 
-struct DissipationField{divide_by_area} <: AbstractScalarField{divide_by_area}
+abstract type DissipationLikeField{D} <: AbstractScalarField{D} end
+Base.fieldname(::DissipationLikeField) = :ε
+
+struct DissipationField{divide_by_area} <: DissipationLikeField{divide_by_area}
     inplane :: Bool
     ν :: Float64
     @inline function DissipationField(;
@@ -33,12 +36,29 @@ struct DissipationField{divide_by_area} <: AbstractScalarField{divide_by_area}
 end
 
 compute_inplane(f::DissipationField) = f.inplane
-Base.fieldname(::DissipationField) = :ε
 
 metadata(f::DissipationField) = (
     "divided_by_area" => divide_by_area(f),
     "inplane (2D)" => compute_inplane(f),
     "viscosity" => f.ν,
+)
+
+"""
+    EnstrophyField
+
+Represents the in-plane enstrophy field ``Ω = ω_z^2 / 2``.
+"""
+struct EnstrophyField{divide_by_area} <: DissipationLikeField{divide_by_area}
+    @inline EnstrophyField(; divide_by_area::Bool = false) =
+        new{divide_by_area}()
+end
+
+# This is always computed in-plane (it's not the full enstrophy!).
+compute_inplane(::EnstrophyField) = true
+
+metadata(f::EnstrophyField) = (
+    "divided_by_area" => divide_by_area(f),
+    "inplane (2D)" => compute_inplane(f),
 )
 
 """
@@ -98,6 +118,30 @@ function compute_from_velocity!(
     ε .= (ε .+ 2 .* buf.^2) .* 2ν
 
     ε
+end
+
+function compute_from_velocity!(
+        field::EnstrophyField, Ω::AbstractArray{<:Real,2},
+        v_hat::NTuple{2, AbstractArray{<:Complex,2}};
+        ks, fft_plan, buf_hat,
+        buf = nothing,  # not needed; just for compatibility with other method
+    )
+    @assert compute_inplane(field)
+    @assert size(buf_hat) == size(v_hat[1]) == length.(ks)
+
+    # 1. Compute ω_z
+    ω_hat = buf_hat
+    ω = Ω
+    @inbounds for I in CartesianIndices(ω_hat)
+        kx, ky = getindex.(ks, Tuple(I))
+        ω_hat[I] = im * (kx * v_hat[2][I] - ky * v_hat[1][I])
+    end
+    ldiv!(ω, fft_plan, ω_hat)
+
+    # 2. Enstrophy
+    Ω .= ω.^2 ./ 2
+
+    Ω
 end
 
 function find_field(

@@ -130,7 +130,7 @@ function compute!(
 
     st1 = first(stats_t)
 
-    field_ε = find_field(DissipationField, scalar_fields(st1))
+    field_ε = find_field(DissipationLikeField, scalar_fields(st1))
     with_dissipation = !isnothing(field_ε)
     if with_dissipation
         throw(ArgumentError(
@@ -172,7 +172,7 @@ function compute!(
     st1 = first(stats_t)
 
     field_Γ = find_field(CirculationField, scalar_fields(st1))
-    field_ε = find_field(DissipationField, scalar_fields(st1))
+    field_ε = find_field(DissipationLikeField, scalar_fields(st1))
     with_dissipation = !isnothing(field_ε)
     @assert !isnothing(field_Γ)
 
