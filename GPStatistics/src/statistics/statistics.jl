@@ -205,7 +205,9 @@ function write_field_metadata(gparent, fields)
     map(fields) do field
         gname = string(nameof(typeof(field)))
         g = create_group(gmeta, gname)
-        g["divided_by_area"] = divide_by_area(field)
+        for (key, val) in metadata(field)
+            g[key] = val
+        end
     end
     nothing
 end

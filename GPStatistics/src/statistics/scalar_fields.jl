@@ -14,6 +14,10 @@ end
 divide_by_area(::CirculationField{D}) where {D} = D
 Base.fieldname(::CirculationField) = :Γ
 
+metadata(f::CirculationField) = (
+    "divided_by_area" => divide_by_area(f),
+)
+
 struct DissipationField{divide_by_area} <: AbstractScalarField
     inplane :: Bool
     ν :: Float64
@@ -29,6 +33,11 @@ end
 divide_by_area(::DissipationField{D}) where {D} = D
 compute_inplane(f::DissipationField) = f.inplane
 Base.fieldname(::DissipationField) = :ε
+
+metadata(f::DissipationField) = (
+    "divided_by_area" => divide_by_area(f),
+    "inplane (2D)" => compute_inplane(f),
+)
 
 """
     compute_from_velocity!(
