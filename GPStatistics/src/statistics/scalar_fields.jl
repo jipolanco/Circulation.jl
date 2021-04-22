@@ -2,23 +2,25 @@ export CirculationField, DissipationField
 
 using LinearAlgebra: ldiv!
 
-abstract type AbstractScalarField end
+abstract type AbstractScalarField{divide_by_area} end
+
 @inline Base.fieldname(f::AbstractScalarField, suffix) =
     Symbol(fieldname(f), suffix)
 
-struct CirculationField{divide_by_area} <: AbstractScalarField
+divide_by_area(::AbstractScalarField{D}) where {D} = D
+
+struct CirculationField{divide_by_area} <: AbstractScalarField{divide_by_area}
     @inline CirculationField(; divide_by_area::Bool = false) =
         new{divide_by_area}()
 end
 
-divide_by_area(::CirculationField{D}) where {D} = D
 Base.fieldname(::CirculationField) = :Γ
 
 metadata(f::CirculationField) = (
     "divided_by_area" => divide_by_area(f),
 )
 
-struct DissipationField{divide_by_area} <: AbstractScalarField
+struct DissipationField{divide_by_area} <: AbstractScalarField{divide_by_area}
     inplane :: Bool
     ν :: Float64
     @inline function DissipationField(;
@@ -30,7 +32,6 @@ struct DissipationField{divide_by_area} <: AbstractScalarField
     end
 end
 
-divide_by_area(::DissipationField{D}) where {D} = D
 compute_inplane(f::DissipationField) = f.inplane
 Base.fieldname(::DissipationField) = :ε
 
@@ -70,7 +71,7 @@ function compute_from_velocity!(
     ν = field.ν
 
     # 1. Sxx = 𝜕_x v_x
-    for (I, vx) in pairs(IndexCartesian(), v_hat[1])
+    @inbounds for (I, vx) in pairs(IndexCartesian(), v_hat[1])
         i = Tuple(I)[1]
         kx = ks[1][i]
         buf_hat[I] = im * kx * vx
@@ -79,7 +80,7 @@ function compute_from_velocity!(
     ε .= buf.^2
 
     # 2. Syy = 𝜕_y v_y
-    for (I, vy) in pairs(IndexCartesian(), v_hat[2])
+    @inbounds for (I, vy) in pairs(IndexCartesian(), v_hat[2])
         j = Tuple(I)[2]
         ky = ks[2][j]
         buf_hat[I] = im * ky * vy
@@ -88,7 +89,7 @@ function compute_from_velocity!(
     ε .+= buf.^2
 
     # 3. Sxy = (𝜕_x v_y + 𝜕_y v_x) / 2
-    for I in CartesianIndices(buf_hat)
+    @inbounds for I in CartesianIndices(buf_hat)
         kx, ky = getindex.(ks, Tuple(I))
         buf_hat[I] = im * (kx * v_hat[2][I] + ky * v_hat[1][I]) / 2
     end
