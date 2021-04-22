@@ -251,7 +251,7 @@ font.weight:  300
 #font.stretch: normal
 font.size:    10.0
 
-font.serif           : DejaVu Serif, TeX Gyre Termes, Latin Modern Roman, CMU Serif, Times, TeX Gyre Termes, Times New Roman
+font.serif           : TeX Gyre Termes, DejaVu Serif, Latin Modern Roman, CMU Serif, Times, TeX Gyre Termes, Times New Roman
 font.sans-serif      : Fira Sans, TeX Gyre Heros, DejaVu Sans, Bitstream Vera Sans, Lucida Grande, Verdana, Geneva, Lucid, Arial, Helvetica, Avant Garde, sans-serif
 font.cursive         : TeX Gyre Chorus, cursive
 #font.cursive        : Apple Chancery, Textile, Zapf Chancery, Sand, Script MT, Felipa, cursive
