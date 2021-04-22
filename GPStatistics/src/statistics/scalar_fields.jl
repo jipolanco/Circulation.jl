@@ -37,6 +37,7 @@ Base.fieldname(::DissipationField) = :ε
 metadata(f::DissipationField) = (
     "divided_by_area" => divide_by_area(f),
     "inplane (2D)" => compute_inplane(f),
+    "viscosity" => f.ν,
 )
 
 """
