@@ -177,6 +177,16 @@ function compute!(
     @assert !isnothing(field_Γ)
 
     if with_dissipation
+        if compute_inplane(field_ε)
+            @timeit to "compute ε_2D" begin
+                compute_from_velocity!(
+                    field_ε, fields.ε, v_hat;
+                    fft_plan = fields.plan,
+                    ks = Kernels.wavenumbers(g_hat),
+                    buf = Γ, buf_hat = fields.Γ_hat,
+                )
+            end
+        end
         @timeit to "FFT(ε)" mul!(fields.ε_hat, fields.plan, fields.ε)
         ε_coarse = fields.ε_coarse
         fields_stats = (; Γ, ε = ε_coarse)

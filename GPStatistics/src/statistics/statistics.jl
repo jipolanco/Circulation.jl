@@ -500,8 +500,15 @@ function analyse_slice!(
             error("resampling_factor can't be different from 1 when loading velocity field")
         end
         gp_slice = load_velocity_slice!(F.vs, gp, slice, data_params, to)
-        if !isnothing(find_field(DissipationField, required_fields))
-            load_dissipation_slice!(F.ε, gp, slice, data_params, to)
+        field_ε = find_field(DissipationField, required_fields)
+        if !isnothing(field_ε)
+            if compute_inplane(field_ε)
+                # We do nothing for now: ε is computed from velocity field,
+                # after the latter has been transformed to Fourier space.
+                # (!! Only works for circulation statistics with ConvolutionMethod).
+            else
+                load_dissipation_slice!(F.ε, gp, slice, data_params, to)
+            end
         end
         @assert isnothing(F.ρ)
     else

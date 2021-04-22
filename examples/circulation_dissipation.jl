@@ -20,6 +20,7 @@ end
 function main()
     dims = (16, 15, 14)
     Ls = (2π, 2π, 2π)
+    ν = 0.01
 
     data_params = (
         load_velocity = true,
@@ -37,7 +38,8 @@ function main()
     circulation = let
         fields = (
             CirculationField(divide_by_area = false),
-            DissipationField(divide_by_area = false),  # this is actually A * ε_r
+            # This is actually A * ε_r:
+            DissipationField(divide_by_area = false, inplane_only = true, ν = ν),
         )
         L = π
         U = 1  # typical large-scale velocity
