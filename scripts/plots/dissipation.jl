@@ -126,16 +126,28 @@ function load_stats(g, params)
     As = g["kernel_area"][:] :: Vector{Float64}
     @assert As ≈ rs.^2
 
+    using_enstrophy = haskey(g, "FieldMetadata/EnstrophyField")
+
     let g = open_group(g, "FieldMetadata")
         @assert read(g["CirculationField/divided_by_area"]) ==
             CIRCULATION_DIVIDED_BY_AREA[]
-        @assert read(g["DissipationField/divided_by_area"]) ==
+
+        gname = using_enstrophy ? "EnstrophyField" : "DissipationField"
+
+        @assert read(g["$gname/divided_by_area"]) ==
             !DISSIPATION_MULTIPLIED_BY_AREA[]
+
+        let name = "$gname/inplane (2D)"
+            inplane = haskey(g, name) ? Bool(read(g[name])) : false
+            println("In-plane dissipation: ", inplane)
+        end
     end
 
     histograms2D = load_histograms2D(g["Histogram2D"])
     histograms_Γ = load_histograms1D(g["HistogramCirculation"], rs, :Γ)
     histograms_ε = load_histograms1D(g["HistogramDissipation"], rs, :ε)
+
+    ν = params.ν
 
     # Estimate ⟨ε⦒ from smallest loop size.
     ε_mean = let H = histograms_ε, j = 1
@@ -143,12 +155,15 @@ function load_stats(g, params)
         if DISSIPATION_MULTIPLIED_BY_AREA[]
             mean /= As[j]
         end
+        if using_enstrophy
+            # In this case, we just computed ⟨Ω⟩ = ⟨ε⟩ / 2ν
+            mean *= 2ν
+        end
         mean
     end
 
     Lbox = params.Ls[1]
     Δx = Lbox / params.Ns[1]
-    ν = params.ν
     η = (ν^3 / ε_mean)^(1/4)
     rs_η = rs ./ η
     As_η = As ./ η^2
@@ -160,9 +175,11 @@ function load_stats(g, params)
     enstrophy = ε_mean / (2ν)
     Γ_taylor = taylor_scale^2 * sqrt(2enstrophy / 3)
 
+    @show ε_mean, enstrophy
     @show η, Lbox / η, Δx / η, taylor_scale / η
 
     (; rs, As, rs_η, As_η, L = Lbox, η, ν,
+        using_enstrophy,
         taylor_scale, enstrophy, Γ_taylor,
         histograms2D,
         histograms_Γ, histograms_ε,
@@ -186,22 +203,6 @@ function load_data(ff::HDF5.File)
     params = load_simulation_params(ff["SimParams"])
     stats = load_stats(ff["Statistics/Velocity"], params)
     (; params, stats)
-end
-
-function plot_pdf_2D!(ax, stats; r)
-    histograms = stats.histograms
-    hist = @view histograms.hist[:, :, r]
-    A = stats.As[r]
-    pdf = Float32.(hist) ./ (histograms.samples[r] * A)
-    Γ = histograms.bins_Γ .* A
-    ε = histograms.bins_ε
-    ax.set_xlabel(L"Γ_r")
-    ax.set_ylabel(L"ε_r")
-    norm = mpl.colors.LogNorm(1e-8, 1e-3)
-    plot = ax.pcolormesh(Γ, ε, pdf'; norm, shading = :flat)
-    fig = ax.get_figure()
-    fig.colorbar(plot; ax)
-    ax
 end
 
 moment(f::Function, edges, pdf, ::Val{p}) where {p} = sum(eachindex(pdf)) do i
@@ -325,6 +326,77 @@ function plot_condpdfs!(ax, stats)
     ax
 end
 
+function plot_dissipation_K62!(ax, stats)
+    histograms = stats.histograms_ε
+    using_enstrophy = stats.using_enstrophy
+
+    pdfs = histograms.pdfs
+    As = stats.As
+    εs = histograms.xs
+    ε_mean = stats.ε_mean
+
+    εr_log_mean = map(axes(pdfs, 2)) do j
+        pdf = @view pdfs[:, j]
+        y = sum(axes(pdfs, 1)) do i
+            xc = (εs[i] + εs[i + 1]) / 2
+            dx = εs[i + 1] - εs[i]
+            log(xc) * pdf[i] * dx
+        end
+        if DISSIPATION_MULTIPLIED_BY_AREA[]
+            # In this case, we computed ⟨ log(A * ε_r) ⟩ = log(A) + ⟨ log(ε_r) ⟩.
+            y -= log(As[j])
+        end
+        y -= log(ε_mean)
+    end
+
+    λ = stats.taylor_scale
+    rs = stats.rs ./ λ
+
+    ax.plot(rs, εr_log_mean; marker = :o)
+
+    # Linear regression fit: y = A + μ * x
+    if using_enstrophy
+        inds_fit = 0.1 .≤ rs .≤ 1.0
+    else
+        inds_fit = 0.2 .≤ rs .≤ 2.0
+    end
+    rs_fit = rs[inds_fit]
+    A, μ = let
+        y = εr_log_mean[inds_fit]
+        x = hcat(ones(length(y)), log.(rs_fit))
+        b = (x'x) \ (x'y)
+        b[1], b[2]
+    end
+    yfit = A .+ μ * log.(rs)
+    @show A, μ
+
+    ax.axvspan(rs_fit[1], rs_fit[end]; color = "tab:green", alpha = 0.2)
+
+    let inds = 1:length(rs)-6
+        @views ax.plot(rs[inds], yfit[inds]; ls = :dashed, c = :black)
+    end
+
+    μ_round = round(μ, digits = 3)
+    ax.text(
+        0.04, 0.96,
+        """
+        Fit: \$A + μ \\, \\log r\$
+        with \$μ = $μ_round\$
+        """
+        ;
+        transform = ax.transAxes,
+        va = "top", ha = "left",
+        fontsize = :large,
+        bbox = Dict(:facecolor => :white, :alpha => 1),
+    )
+
+    ax.set_xscale(:log)
+    ax.set_xlabel(L"r / λ")
+    ax.set_ylabel(L"\left< \log (ε_r / ε_0) \right>")
+
+    ax
+end
+
 function plot_pdf_εr!(ax, stats; logpdf = false)
     histograms = stats.histograms_ε
 
@@ -440,10 +512,10 @@ function plot_pdfs(stats)
             title = L"(ε_r / \langle ε \rangle)^{1/2} \, r / λ",
         )
     end
-    fig.savefig("pdfs.svg", dpi=300)
+    # fig.savefig("pdfs.svg", dpi=300)
 end
 
-function plot_moments!(axes, stats, moments)
+function plot_moments!(axes, stats, moments; ess = false)
     rname = moments.rname
     rs = moments.rs
     rs_norm = rs ./ moments.rnorm
@@ -491,9 +563,14 @@ function plot_moments!(axes, stats, moments)
         end
         let ax = axes[2]
             x = @views (rs_norm[1:end-1] .+ rs_norm[2:end]) ./ 2
-            y = @view slopes[:, j]
-            ax.plot(x, y; color, marker = :.)
+            if ess
+                @assert ps[2] == 2
+                y = @views slopes[:, j] ./ slopes[:, 2] .* 4 * ps[2] / 3
+            else
+                y = @view slopes[:, j]
+            end
             ax.axhline(4p/3; color, ls = :dotted)
+            ax.plot(x, y; color, marker = :.)
             # ax.axhline(slopes_fitted[j]; color, ls = :solid)
         end
     end
@@ -504,6 +581,8 @@ function plot_moments!(axes, stats, moments)
         ax.set_ylabel(L"λ_p")
         ax.plot(ps, slopes_fitted; marker = :o)
         ax.set_xlabel(L"p")
+        ax.set_xlim((extrema(ps) .+ (-1, 1))...)
+        ax.set_ylim(0, 14)
     end
 
     let ax = axes[1]
@@ -514,6 +593,7 @@ function plot_moments!(axes, stats, moments)
 end
 
 function compute_moments(hists, stats; ps = 1:10)
+    using_enstrophy = stats.using_enstrophy
     xs = hists.xs
     pdfs = hists.pdfs
     rs = collect(hists.rs)
@@ -529,11 +609,18 @@ function compute_moments(hists, stats; ps = 1:10)
         rlabel_norm = L"r / λ"
     elseif rname == :εA
         divide_by_area = false
-        λ = stats.taylor_scale * sqrt(stats.ε_mean)
+        if using_enstrophy
+            # Units of (Ω r^2)^{1/2} ~ L / T
+            λ = (stats.taylor_scale * stats.ε_mean)^(1/3)
+            rlabel = "Ω_r r^2"
+            rlabel_norm = L"Ω_r^{1/2} r / (λ \langle ε \rangle)^{1/3}"
+        else
+            λ = stats.taylor_scale * sqrt(stats.ε_mean)
+            rlabel = "ε_r r^2"
+            rlabel_norm = L"(ε_r / \langle ε \rangle)^{1/2} r / λ"
+        end
         rs .= sqrt.(rs)
-        fit_region_λ_est = (1, 4)
-        rlabel = "ε_r r^2"
-        rlabel_norm = L"(ε_r / \langle ε \rangle)^{1/2} r / λ"
+        fit_region_λ_est = (0.6, 5)
     end
 
     Nr = size(pdfs, 2)
@@ -547,6 +634,9 @@ function compute_moments(hists, stats; ps = 1:10)
     slopes_fitted = similar(slopes, Np)
 
     r_indices_fit = map(a -> searchsortedlast(rs, a * λ), fit_region_λ_est)
+    if r_indices_fit[1] == 0
+        r_indices_fit = r_indices_fit .+ 1
+    end
     fit_region_λ = getindex.(Ref(rs), r_indices_fit) ./ λ  # actual fit region
     @show fit_region_λ
 
@@ -584,34 +674,53 @@ function compute_moments(hists, stats; ps = 1:10)
     )
 end
 
-function plot_circulation_moments(stats)
+function plot_circulation_moments(stats; kws...)
     hists = stats.histograms_Γ
     moments = compute_moments(hists, stats)
     fig, axes = plt.subplots(1, 3; figsize = (10, 4))
-    plot_moments!(axes, stats, moments)
-    fig.savefig("moments.svg", dpi=300)
+    plot_moments!(axes, stats, moments; kws...)
+    # fig.savefig("moments.svg", dpi=300)
     nothing
 end
 
-function plot_conditional_moments(stats)
+function plot_conditional_moments(stats; kws...)
     hists = stats.histograms2D
     moments = compute_moments(hists.conditional, stats)
     fig, axes = plt.subplots(1, 3; figsize = (10, 4))
-    plot_moments!(axes, stats, moments)
-    fig.savefig("moments_conditioned.svg", dpi=300)
+    plot_moments!(axes, stats, moments; kws...)
+    # fig.savefig("moments_conditioned.svg", dpi=300)
+    nothing
+end
+
+function plot_dissipation_stats(stats)
+    fig, axes = plt.subplots(1, 3; figsize = (10, 4))
+    let ax = axes[1]
+        plot_pdf_εr!(ax, stats; logpdf = true)
+        ax.set_ylim(1e-6, 1)
+        ax.legend(
+            title = L"r / λ", fontsize = :small, frameon = false,
+            loc = "lower center",
+        )
+    end
+    let ax = axes[2]
+        plot_dissipation_K62!(ax, stats)
+    end
     nothing
 end
 
 function main()
     params = (;
-        results_file = "../../results/data_NS/NS1024_2013/R0_GradientForcing/Dissipation/circulation_dissA.logbins.v2.h5",
-        # results_file = "../../results/data_NS/NS1024_2013/R0_GradientForcing/Dissipation/circulation_dissA.h5",
+        # results_file = "../../results/data_NS/NS1024_2013/R0_GradientForcing/Dissipation/circulation_dissA.logbins.v2.h5",
+        # results_file = "../../results/data_NS/NS1024_2013/R0_GradientForcing/Dissipation/circulation_diss2D.h5",
+        results_file = "../../results/data_NS/NS1024_2013/R0_GradientForcing/Dissipation/circulation_enstrophy2D.v2.h5",
     )
     data = h5open(load_data, params.results_file, "r")
     stats = data.stats
     plot_pdfs(stats)
-    plot_circulation_moments(stats)
-    plot_conditional_moments(stats)
+    plot_dissipation_stats(stats)
+    ess = false
+    plot_circulation_moments(stats; ess)
+    plot_conditional_moments(stats; ess)
 end
 
 main()
