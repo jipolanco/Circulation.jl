@@ -503,7 +503,7 @@ legend.handlelength   : 1.4      ## the length of the legend lines
 #figure.titleweight : normal   ## weight of the figure title
 #figure.figsize   : 6.4, 4.8   ## figure size in inches
 figure.figsize    : 3.4, 2.55
-figure.dpi        : 200      # figure dots per inch
+figure.dpi        : 160      # figure dots per inch
 #figure.facecolor : white      ## figure facecolor
 #figure.edgecolor : white      ## figure edgecolor
 #figure.frameon : True         ## enable figure frame
