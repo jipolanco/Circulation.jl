@@ -1,6 +1,7 @@
 import PyPlot: plt
 const mpl = plt.matplotlib
 using LaTeXStrings
+using TimerOutputs
 
 using DelimitedFiles
 using HDF5
@@ -13,6 +14,8 @@ const DISSIPATION_MULTIPLIED_BY_AREA = Ref(false)
 
 const TEX_MEAN_ε = raw"\left< ε \right>"
 
+const to = TimerOutput()
+
 function to_steprange(xs::AbstractVector)
     islinear = all(eachindex(xs)[2:end-1]) do i
         a = xs[i] - xs[i - 1]
@@ -24,9 +27,24 @@ function to_steprange(xs::AbstractVector)
     range(xs[1], xs[end]; step)
 end
 
-function load_histograms2D(g, rs)
+function check_histogram(hist, samples, label; tol = 1e-3)
+    colons = ntuple(_ -> Colon(), Val(ndims(hist) - 1))
+    # Check that (almost) all samples are in the PDFs
+    for r in eachindex(samples)
+        ratio = @views sum(hist[colons..., r]) / samples[r]
+        if 1 - ratio > tol
+            @show label, r, ratio
+        end
+    end
+    nothing
+end
+
+@timeit to function load_histograms2D(g, rs)
     merged_scales = Bool(read(g["merged_scales"]))
-    hist_full = g["hist"][:, :, :] :: Array{Int64,3}  # (Γ, εA, r)
+    hist_full = g["hist"][:, :, :] :: Array{Int64,3}  # (Γ, ε, r)
+
+    hist1 = read(g["hist1"]) :: Array{Int64,2}  # (Γ, r)
+    hist2 = read(g["hist2"]) :: Array{Int64,2}  # (ε, r)
 
     bins1 = to_steprange(g["bin_edges1"][:] :: Vector{Float64})
     bins2 = g["bin_edges2"][:] :: Vector{Float64}
@@ -36,19 +54,20 @@ function load_histograms2D(g, rs)
 
     samples = g["total_samples"][:] :: Vector{Int64}
 
-    # Check that (almost) all samples are in the PDFs
-    # @show sum(hist_full) / samples
-    # @assert isapprox(sum(hist_full), samples; rtol=1e-3)
+    check_histogram(hist_full, samples, basename(HDF5.name(g)))
 
-    conditional = conditional_pdfs(hist_full, rs, bins1, bins2, :Γ)
+    conditional = conditional_pdfs(hist_full, hist2, rs, bins1, bins2, :Γ)
 
     (; hist_full, minima, maxima, samples, bins_Γ = bins1, conditional)
 end
 
-function load_histograms1D(g, rs, field)
+@timeit to function load_histograms1D(g, rs, field)
     xs = g["bin_edges"][:] :: Vector{Float64}
     hist = g["hist"][:, :] :: Array{Int64,2}
     samples = g["total_samples"][:] :: Vector{Int}
+
+    check_histogram(hist, samples, basename(HDF5.name(g)))
+
     pdfs = similar(hist, Float64)
     for j in axes(pdfs, 2)
         p = @view pdfs[:, j]
@@ -65,27 +84,53 @@ function load_histograms1D(g, rs, field)
     )
 end
 
-function conditional_pdfs(hist2D, rs, xs, ys_all, field::Symbol)
-    mergebins = 2
-    @assert (length(ys_all) - 1) % mergebins == 0
-    ys = [ys_all[i] for i = 1:mergebins:lastindex(ys_all)]
+@timeit to function conditional_pdfs(
+        hist2D, hist_y_all, rs, xs, ys_all, field::Symbol,
+    )
+    @assert size(hist2D, 2) == size(hist_y_all, 1) == length(ys_all) - 1
+
+    # Merge the first 4 bins, then the next 4 bins, then the next 8 bins, then
+    # the rest...
+    mergebins = [4, 4, 8]
+    append!(mergebins, length(ys_all) - sum(mergebins) - 1)
+    mergetot = cumsum(mergebins)
+    @assert sum(mergebins) == mergetot[end] == length(ys_all) - 1
+
+    ys = similar(ys_all, length(mergebins) + 1)
+    ys[begin] = ys_all[begin]
+    for i in eachindex(mergetot)
+        ys[1 + i] = ys_all[1 + mergetot[i]]
+    end
     @assert ys[end] == ys_all[end]
-    # ys = ys_all
+
     Nx = length(xs) - 1
     Ny = length(ys) - 1
     Nr = size(hist2D, 3)
     hist = zeros(eltype(hist2D), Nx, Ny, Nr)
+    hist_y = zeros(eltype(hist2D), Ny, Nr)
     for k ∈ axes(hist2D, 3), j ∈ axes(hist2D, 2)
-        jj = div(j, mergebins, RoundUp)
+        jj = searchsortedfirst(mergetot, j)
+        hist_y[jj, k] += hist_y_all[j, k]
         for i in axes(hist2D, 1)
             hist[i, jj, k] += hist2D[i, j, k]
         end
     end
-    pdfs = similar(hist, Float64)
+
+    pdfs = zeros(Float64, size(hist))
     for k in axes(pdfs, 3)
         for j in axes(pdfs, 2)
             h = @view hist[:, j, k]
             s = sum(h)
+            s_expected = hist_y[j, k]
+            # if 1 - s / s_expected > 1e-4
+            if s_expected > 0 && !isapprox(s / s_expected, 1; atol = 1e-6)
+                @warn(
+                    "Some samples are not included in the 2D histogram." *
+                    " The range of circulation bins should be enlarged!" *
+                    " ($s ≠ $s_expected)"
+                )
+            end
+            s == 0 && continue  # this conditional PDF has no events!
             for i in axes(pdfs, 1)
                 dx = xs[i + 1] - xs[i]
                 pdfs[i, j, k] = h[i] / (s * dx)
@@ -93,6 +138,7 @@ function conditional_pdfs(hist2D, rs, xs, ys_all, field::Symbol)
         end
     end
     εs = ys
+    @show εs
     (; field,
         bin_edges = xs,
         εs, rs, pdfs,
@@ -106,7 +152,19 @@ function r_indices_to_plot(rs)
     N = length(inds)
     # subinds = Iterators.flatten((inds[2:2:10], inds[12:1:(N - 8)]))
     # collect(subinds)  # we want an AbstractVector...
-    inds[4:1:N-6]
+    if N > 30
+        # inds[12:2:(N - 6)]  # case of 2048^3 data
+        inds[13:1:(N - 8)]
+    else
+        inds[4:1:N-6]
+    end
+end
+
+function ε_indices_to_plot(εs)
+    inds = eachindex(εs)
+    N = length(inds) - 1
+    n = min(8, N)
+    inds[1:1:n]
 end
 
 function mappable_colour(cmap, vmin, vmax)
@@ -121,7 +179,7 @@ function mappable_colour(cmap, inds::AbstractVector)
     mappable_colour(cmap, first(r), last(r))
 end
 
-function load_stats(g, params)
+@timeit to function load_stats(g, params)
     rs = g["kernel_size"][:] :: Vector{Float64}
     As = g["kernel_area"][:] :: Vector{Float64}
     @assert As ≈ rs.^2
@@ -150,15 +208,17 @@ function load_stats(g, params)
     ν = params.ν
 
     # Estimate ⟨ε⦒ from smallest loop size.
-    # ε_mean = let H = histograms_ε, j = 1
-    #     mean = @views moment(H.bin_edges, H.pdfs[:, j, 1], Val(1))
-    #     if DISSIPATION_MULTIPLIED_BY_AREA[]
-    #         mean /= As[j]
-    #     end
-    #     mean
-    # end
+    ε_mean_est = let H = histograms_ε, j = 1
+        mean = @views moment(H.bin_edges, H.pdfs[:, j, 1], Val(1))
+        if DISSIPATION_MULTIPLIED_BY_AREA[]
+            mean /= As[j]
+        end
+        mean
+    end
 
     ε_mean = params.DNS_dissipation
+
+    @assert isapprox(ε_mean, ε_mean_est; rtol = 1e-3)
 
     Lbox = params.Ls[1]
     Δx = Lbox / params.Ns[1]
@@ -175,7 +235,7 @@ function load_stats(g, params)
     enstrophy = ε_mean / (2ν)
     Γ_taylor = taylor_scale^2 * sqrt(2enstrophy / 3)
 
-    @show ε_mean, enstrophy
+    @show ε_mean, ε_mean_est, enstrophy
     @show η, Lbox / η, Δx / η, taylor_scale / η
 
     (; rs, As, rs_η, As_η, rs_λ, L = Lbox, η, ν,
@@ -187,20 +247,17 @@ function load_stats(g, params)
     )
 end
 
-function load_simulation_params(g)
-    (
+function load_simulation_params(g, paramsNS)
+    (;
         Ns = Tuple(g["dims"][:]) :: NTuple{3,Int},
         Ls = Tuple(g["L"][:]) :: NTuple{3,Float64},
+        paramsNS...,
         # η = 0.00245,  # from DNS
-        DNS_timestep = 70_000,
-        DNS_energy = 0.0521297,  # from DNS, timestep 70k
-        DNS_dissipation = 0.00376189,
-        ν = 5e-5,
     )
 end
 
-function load_data(ff::HDF5.File)
-    params = load_simulation_params(ff["SimParams"])
+function load_data(ff::HDF5.File, paramsNS)
+    params = load_simulation_params(ff["SimParams"], paramsNS)
     stats = load_stats(ff["Statistics/Velocity"], params)
     (; params, stats)
 end
@@ -223,7 +280,12 @@ function normal_pdf(x; μ = 0, σ = 1)
     exp(-0.5 * (x - μ)^2 / σ^2) / (σ * sqrt(2π))
 end
 
-function plot_pdf_Γr!(ax, stats)
+function plot_normal_pdf!(ax, xs; kws...)
+    ys = normal_pdf.(xs)
+    ax.plot(xs, ys; color = "tab:red", ls = :dashed, lw = 1.5, kws...)
+end
+
+function plot_pdf_Γr!(ax, stats; cmap = plt.cm.viridis_r)
     histograms = stats.histograms_Γ
 
     hists = histograms.hist
@@ -237,10 +299,10 @@ function plot_pdf_Γr!(ax, stats)
     ax.set_xlabel(L"Γ_r / \left< Γ_r^2 \right>^{1/2}")
     ax.set_ylabel("Probability")
     r_indices = r_indices_to_plot(As)
-    cmap = mappable_colour(plt.cm.viridis_r, r_indices)
+    cmap_norm = mappable_colour(cmap, r_indices)
 
     for (i, r) in enumerate(r_indices)
-        color = cmap(i)
+        color = cmap_norm(i)
         A = As[r]
         hist = @view hists[:, r]
         xs = collect(Γs)
@@ -263,13 +325,17 @@ function plot_pdf_Γr!(ax, stats)
         r_λ = round(stats.rs[r] / λ, digits = 2)
         ax.plot(
             xs_centre, pdf;
-            marker = ".", color, label = latexstring("$r_λ"),
+            # marker = ".",
+            color, label = latexstring("$r_λ"),
         )
     end
+
+    plot_normal_pdf!(ax, -6:0.1:6)
+
     ax
 end
 
-function plot_condpdfs!(ax, stats; rind = nothing, εind = nothing)
+function plot_condpdfs!(ax, stats; rind = nothing, εind = nothing, cmap)
     histograms = stats.histograms2D
     conditional = histograms.conditional
     using_enstrophy = stats.using_enstrophy
@@ -309,7 +375,7 @@ function plot_condpdfs!(ax, stats; rind = nothing, εind = nothing)
     end
 
     if !isnothing(rind)
-        pdf_indices = eachindex(εs)[1:end-5]
+        pdf_indices = ε_indices_to_plot(εs)
         text = let r = round(rs_λ[rind], digits = 2)
             latexstring("r / λ = $r")
         end
@@ -317,17 +383,17 @@ function plot_condpdfs!(ax, stats; rind = nothing, εind = nothing)
         pdf_indices = r_indices_to_plot(rs)
         ε_range = (εs[εind], εs[εind + 1])
         text = let ε = round.(ε_range ./ ε_norm, digits = 2)
-            latexstring("ε / \\left< ε \\right> ∈ $ε")
+            latexstring("ε_r / \\left< ε \\right> ∈ $ε")
         end
     end
 
     ax.text(
-        0.98, 0.98, text;
-        ha = :right, va = :top, transform = ax.transAxes,
+        0.02, 0.98, text;
+        ha = :left, va = :top, transform = ax.transAxes,
     )
 
     Ncurves = length(pdf_indices)
-    cmap = mappable_colour(plt.cm.cividis_r, 0, 1)
+    cmap_norm = mappable_colour(cmap, 0, 1)
 
     for (n, j) in enumerate(pdf_indices)
         if !isnothing(rind)
@@ -352,7 +418,7 @@ function plot_condpdfs!(ax, stats; rind = nothing, εind = nothing)
             pdf ./= A
         end
 
-        color = cmap((n - 1) / (Ncurves - 1))
+        color = cmap_norm((n - 1) / (Ncurves - 1))
 
         xrms = sqrt(variance(xs, pdf))
         pdf .*= xrms
@@ -361,9 +427,12 @@ function plot_condpdfs!(ax, stats; rind = nothing, εind = nothing)
         xs_centre = @views (xs[1:end-1] .+ xs[2:end]) ./ 2
         ax.plot(
             xs_centre, pdf;
-            marker = ".", color, label,
+            # marker = ".",
+            color, label,
         )
     end
+
+    plot_normal_pdf!(ax, -6:0.1:6)
 
     ax
 end
@@ -439,7 +508,7 @@ function plot_dissipation_K62!(ax, stats)
     ax
 end
 
-function plot_pdf_εr!(ax, stats; logpdf = false)
+function plot_pdf_εr!(ax, stats; logpdf = false, cmap = plt.cm.viridis_r)
     histograms = stats.histograms_ε
 
     hists = histograms.hist
@@ -455,10 +524,10 @@ function plot_pdf_εr!(ax, stats; logpdf = false)
 
     ax.set_yscale(:log)
     r_indices = r_indices_to_plot(As)
-    cmap = mappable_colour(plt.cm.viridis_r, r_indices)
+    cmap_norm = mappable_colour(cmap, r_indices)
 
     for (i, r) in enumerate(r_indices)
-        color = cmap(i)
+        color = cmap_norm(i)
         A = As[r]
         hist = @view hists[:, r]
 
@@ -484,7 +553,8 @@ function plot_pdf_εr!(ax, stats; logpdf = false)
             ax.plot(
                 xs_centre, pdf;
                 color,
-                marker = ".", label = latexstring("$r_λ"),
+                # marker = ".",
+                label = latexstring("$r_λ"),
             )
             ax.set_xlim(0, 5)
             continue
@@ -509,44 +579,41 @@ function plot_pdf_εr!(ax, stats; logpdf = false)
         ax.plot(
             xs_centre_log, pdf_log;
             color,
-            marker = ".", label = latexstring("$r_λ"),
+            # marker = ".",
+            label = latexstring("$r_λ"),
         )
     end
 
     if logpdf
-        let xs = -5:0.1:5
-            pdf = normal_pdf.(xs)
-            ax.plot(xs, pdf; lw = 1.5, color = "tab:orange", ls = :dashed)
-        end
-
+        plot_normal_pdf!(ax, -5:0.1:5)
         ax.set_xlim(-5, 5)
     end
 
     ax
 end
 
-function plot_pdfs(stats)
-    fig, axes = plt.subplots(2, 2; figsize = (8, 6))
+function plot_pdfs(stats; εind = 2, rind = 8)
+    fig, axes = plt.subplots(2, 2; figsize = 0.9 .* (8, 6), sharey = true)
     using_enstrophy = stats.using_enstrophy
     let ax = axes[1, 1]
-        plot_pdf_Γr!(ax, stats)
-        ax.set_xlim(-12, 12)
+        plot_pdf_Γr!(ax, stats; cmap = plt.cm.viridis_r)
+        ax.set_xlim(-10, 10)
         ax.set_ylim(1e-6, 1)
         ax.legend(
-            fontsize = :small, title = L"r / λ",
+            fontsize = "x-small", title = L"r / λ",
             frameon = false, loc = "upper right",
         )
     end
-    let ax = axes[1, 2]
-        plot_pdf_εr!(ax, stats; logpdf = true)
+    let ax = axes[2, 2]
+        plot_pdf_εr!(ax, stats; logpdf = true, cmap = plt.cm.viridis_r)
         ax.set_ylim(1e-6, 1)
         ax.legend(
-            title = L"r / λ", fontsize = :small, frameon = false,
+            title = L"r / λ", fontsize = "x-small", frameon = false,
             loc = "lower center",
         )
     end
     let ax = axes[2, 1]
-        plot_condpdfs!(ax, stats; rind = 8)
+        plot_condpdfs!(ax, stats; rind, cmap = plt.cm.cividis_r)
         ax.set_xlim(-12, 12)
         ax.set_ylim(1e-6, 1)
         legtitle = if using_enstrophy
@@ -556,30 +623,38 @@ function plot_pdfs(stats)
         end
         ax.legend(
             fontsize = "small", frameon = false,
-            loc = "upper left",
+            loc = "upper right",
             title = legtitle,
         )
     end
-    let ax = axes[2, 2]
-        plot_condpdfs!(ax, stats; εind = 3)
-        ax.set_xlim(-12, 12)
+    let ax = axes[1, 2]
+        plot_condpdfs!(ax, stats; εind, cmap = plt.cm.viridis_r)
+        ax.set_xlim(-10, 10)
         ax.set_ylim(1e-6, 1)
+        ax.set_ylabel("")
         ax.legend(
-            frameon = false, loc = "upper left", title = L"r / λ",
-            fontsize = :small,
+            frameon = false, loc = "upper right", title = L"r / λ",
+            fontsize = "x-small",
         )
     end
     # fig.savefig("pdfs.svg", dpi=300)
 end
 
 function dissipation_bin_text(xs, i, xmean)
-    x_range = round.((xs[i], xs[i + 1]) ./ xmean, digits = 1)
+    x_range = round.((xs[i], xs[i + 1]) ./ xmean, digits = 2)
     string(x_range)
 end
 
 dissipation_bin_text(::Nothing, etc...) = "(0, ∞)"
 
-function plot_moments!(axs, stats, moments; ess = false)
+cmap_dissipation_exponents(::Nothing, etc...) = nothing
+cmap_dissipation_exponents(εs, imax) =
+    mappable_colour(plt.cm.cividis_r, εs[1], εs[imax])
+
+function plot_moments!(
+        axs, stats, moments;
+        ess = false, ε_ind = 1,
+    )
     rs = moments.rs
     rs_norm = rs ./ moments.rnorm
     rlabel = moments.rlabel
@@ -593,14 +668,12 @@ function plot_moments!(axs, stats, moments; ess = false)
     ε_mean = stats.ε_mean
 
     εs = moments.εs
-    εind = min(Nε, 2)
+    εind = min(Nε, ε_ind)
     ε_text = dissipation_bin_text(εs, εind, ε_mean)
     ε_text_full = latexstring("ε ∈ $ε_text")
     ε_ind_max = min(4, Nε)
 
-    if !isnothing(εs)
-        cmap_ε = mappable_colour(plt.cm.plasma, εs[1], εs[ε_ind_max])
-    end
+    cmap_ε = cmap_dissipation_exponents(εs, ε_ind_max)
 
     slopes = moments.slopes
     slopes_fitted = moments.slopes_fitted
@@ -608,7 +681,11 @@ function plot_moments!(axs, stats, moments; ess = false)
     cmap = mappable_colour(plt.cm.viridis_r, ps)
 
     let ax = axs[1]
-        ax.set_xlabel(rlabel_norm)
+        if ess
+            ax.set_xlabel(L"\left< Γ_r^2 \right> / Γ_{\! \mathrm{T}}^2")
+        else
+            ax.set_xlabel(rlabel_norm)
+        end
         ax.set_ylabel(
             latexstring(
                 "\\langle Γ_{\\!r}^p \\, | \\, $rlabel \\rangle " *
@@ -636,7 +713,13 @@ function plot_moments!(axs, stats, moments; ess = false)
         let ax = axs[1]
             k = εind
             y = @view(ys[:, j, k]) ./ Γ_norm^p
-            ax.plot(rs_norm, y; color, marker = :., label = p)
+            x = if ess
+                @assert ps[2] == 2
+                @view(ys[:, 2, k]) ./ Γ_norm^2
+            else
+                rs_norm
+            end
+            ax.plot(x, y; color, marker = :., label = p)
             ax.text(
                 0.5, 0.98, ε_text_full;
                 ha = :center, va = :top, transform = ax.transAxes,
@@ -693,6 +776,7 @@ end
 function plot_circulation_scaling_exponents!(
         ax, stats, moments;
         plot_selfsimilar = false,
+        compensate = false,
     )
     ps = moments.ps
 
@@ -701,39 +785,62 @@ function plot_circulation_scaling_exponents!(
     ε_mean = stats.ε_mean
 
     Np, Nε = size(slopes_fitted)
-    ε_ind_max = min(4, Nε)
+    ε_ind_max = min(10, Nε)
 
     ax.set_xlabel(L"p")
-    ax.set_ylabel(L"λ_p")
     ax.set_xlim((extrema(ps) .+ (-1, 1))...)
-    ax.set_ylim(0, 14)
 
-    if !isnothing(εs)
-        cmap_ε = mappable_colour(plt.cm.plasma, εs[1], εs[ε_ind_max])
+    if compensate
+        ax.set_ylabel(L"λ_p^{\mathrm{K41}} - λ_p")
+    else
+        ax.set_ylim(0, 14)
+        ax.set_ylabel(L"λ_p")
     end
 
-    if plot_selfsimilar
-        slopes_k41 = 4/3 .* ps
-        ax.plot(ps, slopes_k41; color = :black, ls = :dotted)
-    end
+    cmap_ε = cmap_dissipation_exponents(εs, ε_ind_max)
 
     for k in 1:ε_ind_max
         if isnothing(εs)
             color = :black
+            marker = :x
         else
             color = cmap_ε(εs[k])
+            marker = :o
+        end
+        y = slopes_fitted[:, k]
+        if compensate
+            @. y = 4/3 * ps - y
         end
         ax.plot(
-            ps, @view(slopes_fitted[:, k]);
-            marker = :o, color, markersize = 3,
+            ps, y;
+            marker, color, markersize = 4,
             label = latexstring(dissipation_bin_text(εs, k, ε_mean)),
         )
+    end
+
+    if plot_selfsimilar
+        let style = (color = "tab:red", lw = 1, ls = :dashed)
+            if compensate
+                ax.axhline(0; style...)
+            else
+                slopes_k41 = 4/3 .* ps
+                ax.plot(ps, slopes_k41; style...)
+            end
+        end
     end
 
     ax
 end
 
-function compute_moments(hists, stats; ps = 1:10)
+function fit_indices(rs::AbstractVector, λ, r_λ_estimates::NTuple{2})
+    r_indices_fit = map(a -> searchsortedlast(rs, a * λ), r_λ_estimates)
+    if r_indices_fit[1] == 0
+        r_indices_fit = r_indices_fit .+ 1
+    end
+    r_indices_fit
+end
+
+@timeit to function compute_moments(hists, stats; ps = 1:10)
     using_enstrophy = stats.using_enstrophy
     xs = hists.bin_edges
 
@@ -766,32 +873,18 @@ function compute_moments(hists, stats; ps = 1:10)
     slopes = zeros(Nr - 1, Np, Nε)
     slopes_fitted = similar(slopes, Np, Nε)
 
-    r_indices_fit = map(a -> searchsortedlast(rs, a * λ), fit_region_λ_est)
-    if r_indices_fit[1] == 0
-        r_indices_fit = r_indices_fit .+ 1
-    end
-
+    r_indices_fit = fit_indices(rs, λ, fit_region_λ_est)
     fit_region_λ = getindex.(Ref(rs), r_indices_fit) ./ λ  # actual fit region
     @show fit_region_λ
 
     for l in axes(moments, 3)  # for every ε
         for (j, p) in enumerate(ps)
             ys = @view moments[:, j, l]
-
-            for i ∈ 1:Nr
-                pdf = @view pdfs[:, l, i]
-                ys[i] = moment(abs, xs, pdf, Val(p))
-                if multiply_by_area
-                    ys[i] *= As[i]^p
-                end
-            end
-
-            dlog_y = diff(log.(ys))
             sl = @view slopes[:, j, l]
-            sl[:] .= dlog_y ./ dlog_r
-
-            ra, rb = r_indices_fit
-            slopes_fitted[j, l] = sum(n -> sl[n], ra:rb) / (rb - ra + 1)
+            slopes_fitted[j, l] = _compute_moments!(
+                Val(p), ys, sl, @view(pdfs[:, l, :]), xs, As;
+                multiply_by_area, dlog_r, r_indices_fit,
+            )
         end
     end
 
@@ -811,6 +904,34 @@ function compute_moments(hists, stats; ps = 1:10)
     )
 end
 
+@timeit to function _compute_all_moments!(
+        moments, slopes, pdf, pmax,
+    )
+    # TODO
+end
+
+@timeit to function _compute_moments!(
+        ::Val{p}, ys::AbstractVector, slopes::AbstractVector,
+        pdfs::AbstractMatrix, xs, As;
+        multiply_by_area, dlog_r, r_indices_fit,
+    ) where {p}
+    for i ∈ eachindex(ys)
+        pdf = @view pdfs[:, i]
+        ys[i] = moment(abs, xs, pdf, Val(p))
+        if multiply_by_area
+            ys[i] *= As[i]^p
+        end
+    end
+
+    dlog_y = diff(log.(ys))
+    slopes[:] .= dlog_y ./ dlog_r
+
+    ra, rb = r_indices_fit
+    slope_fit = sum(n -> slopes[n], ra:rb) / (rb - ra + 1)
+
+    slope_fit
+end
+
 function plot_circulation_flatness!(ax, stats, moments)
     εs = moments.εs
     ε_mean = stats.ε_mean
@@ -826,7 +947,7 @@ function plot_circulation_flatness!(ax, stats, moments)
     ε_ind_max = min(4, Nε)
 
     if !isnothing(εs)
-        cmap_ε = mappable_colour(plt.cm.plasma, εs[1], εs[ε_ind_max])
+        cmap_ε = mappable_colour(plt.cm.cividis_r, εs[1], εs[ε_ind_max])
     end
 
     # xs = @views (rs_norm[1:end-1] .+ rs_norm[2:end]) ./ 2
@@ -853,33 +974,29 @@ function plot_circulation_flatness!(ax, stats, moments)
     ax
 end
 
-function plot_circulation_moments(stats; kws...)
-    hists = stats.histograms_Γ
-    moments = compute_moments(hists, stats)
+function plot_circulation_moments(stats, moments; kws...)
     fig, axes = plt.subplots(1, 3; figsize = (10, 4))
     plot_moments!(axes, stats, moments; kws...)
     # fig.savefig("moments.svg", dpi=300)
     nothing
 end
 
-function plot_circulation_scaling_exponents(stats)
-    moments_orig = compute_moments(stats.histograms_Γ, stats)
-    moments_cond = compute_moments(stats.histograms2D.conditional, stats)
-    fig, ax = plt.subplots()
+function plot_circulation_scaling_exponents(
+        stats, moments_orig, moments_cond; compensate = false,
+    )
+    fig, ax = plt.subplots(figsize = (4, 3) .* 0.8)
     plot_circulation_scaling_exponents!(
-        ax, stats, moments_orig; plot_selfsimilar = true,
+        ax, stats, moments_cond; plot_selfsimilar = false, compensate,
     )
     plot_circulation_scaling_exponents!(
-        ax, stats, moments_cond; plot_selfsimilar = false,
+        ax, stats, moments_orig; plot_selfsimilar = true, compensate,
     )
-    ax.legend(frameon = false, title = latexstring("ε_r / $TEX_MEAN_ε"))
+    ax.legend(frameon = false, title = latexstring("ε_r / $TEX_MEAN_ε"), fontsize = :small)
     # fig.savefig("exponents.png"; dpi = 300)
     fig
 end
 
-function plot_circulation_flatness(stats)
-    moments_orig = compute_moments(stats.histograms_Γ, stats)
-    moments_cond = compute_moments(stats.histograms2D.conditional, stats)
+function plot_circulation_flatness(stats, moments_orig, moments_cond)
     fig, ax = plt.subplots()
     plot_circulation_flatness!(ax, stats, moments_orig)
     plot_circulation_flatness!(ax, stats, moments_cond)
@@ -890,11 +1007,10 @@ function plot_circulation_flatness(stats)
     fig
 end
 
-function plot_conditional_moments(stats; kws...)
+function plot_conditional_moments(stats, moments_cond; kws...)
     hists = stats.histograms2D
-    moments = compute_moments(hists.conditional, stats)
     fig, axes = plt.subplots(1, 3; figsize = (10, 4))
-    plot_moments!(axes, stats, moments; kws...)
+    plot_moments!(axes, stats, moments_cond; kws...)
     # fig.savefig("moments_conditioned.svg", dpi=300)
     nothing
 end
@@ -915,25 +1031,67 @@ function plot_dissipation_stats(stats)
     nothing
 end
 
-function main()
+function analyse()
+    plt.close(:all)
+    reset_timer!(to)
+
+    params_NS_1024 = (;
+        DNS_timestep = 70_000,
+        DNS_energy = 0.0521297,  # from DNS, timestep 70k
+        DNS_dissipation = 0.00376189,
+        ν = 5e-5,
+    )
+
+    params_NS_2048 = (;
+        DNS_timestep = 32_000,
+        DNS_energy = 3.6588,
+        DNS_dissipation = 1.2523,
+        ν = 2.8e-4,
+    )
+
     params = (;
         # results_file = "../../results/data_NS/NS1024_2013/R0_GradientForcing/Dissipation/circulation_dissA.logbins.v2.h5",
         # results_file = "../../results/data_NS/NS1024_2013/R0_GradientForcing/Dissipation/circulation_diss2D.h5",
         # results_file = "../../results/data_NS/NS1024_2013/R0_GradientForcing/Dissipation/circulation_enstrophy2D.v2.h5",
         # results_file = "../../results/data_NS/NS1024_2013/R0_GradientForcing/Dissipation/test.v3-dissipation3d.h5",
         # results_file = "../../results/data_NS/NS1024_2013/R0_GradientForcing/Dissipation/v3-enstrophy2D.h5",
-        results_file = "../../results/data_NS/NS1024_2013/R0_GradientForcing/Dissipation/v3-dissipation3d.h5",
         # results_file = "../../results/data_NS/NS1024_2013/R0_GradientForcing/Dissipation/v3-dissipation2d.h5",
+
+        # NS = params_NS_1024,
+        # results_file = "../../results/data_NS/NS1024_2013/R0_GradientForcing/Dissipation/v3-dissipation3d.h5",
+
+        results_file = "../../results/data_NS/NS2048/circulation_cond.h5",
+        NS = params_NS_2048,
     )
-    ess = false
-    data = h5open(load_data, params.results_file, "r")
+
+    data = h5open(io -> load_data(io, params.NS), params.results_file, "r")
     stats = data.stats
-    # plot_pdfs(stats)
-    # plot_dissipation_stats(stats)
-    # plot_circulation_moments(stats; ess)
-    # plot_conditional_moments(stats; ess)
-    plot_circulation_scaling_exponents(stats)
-    plot_circulation_flatness(stats)
+
+    moments = compute_moments(stats.histograms_Γ, stats)
+    moments_cond = compute_moments(stats.histograms2D.conditional, stats)
+
+    println(to)
+
+    stats, moments, moments_cond
 end
 
-main()
+function make_plots(stats, moments, moments_cond)
+    ess = false
+
+    plot_pdfs(stats; rind = 12, εind = 2)
+    return
+    # plot_dissipation_stats(stats)
+    # plot_circulation_moments(stats, moments; ess)
+    # plot_conditional_moments(stats, moments_cond; ess, ε_ind = 2)
+    # plot_conditional_moments(stats, moments_cond; ess, ε_ind = 2)
+    plot_conditional_moments(stats, moments_cond; ess, ε_ind = 3)
+    # plot_conditional_moments(stats, moments_cond; ess, ε_ind = 9)
+    plot_circulation_scaling_exponents(stats, moments, moments_cond)
+    # plot_circulation_flatness(stats, moments, moments_cond)
+
+    nothing
+end
+
+data = analyse();
+
+make_plots(data...);
