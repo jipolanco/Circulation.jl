@@ -177,11 +177,11 @@ function materialise!(kf::DiscreteFourierKernel, g::RectangularKernel)
     ks = wavenumbers(kf)
     u = data(kf)
     Ls = 2π ./ getindex.(ks, 2)  # domain size: L = 2π / k[2]
-    Rs = g.sides ./ Ls
+    rs = g.sides
     A = area(g)
 
     # Write sinc evaluations to buffer
-    sincs, offsets = _eval_sincs!(kf.buf, ks, Rs)
+    sincs, offsets = _eval_sincs!(kf.buf, ks, rs)
 
     @inbounds for I in CartesianIndices(u)
         sxy = getindex.(Ref(sincs), Tuple(I) .+ offsets)
@@ -191,7 +191,7 @@ function materialise!(kf::DiscreteFourierKernel, g::RectangularKernel)
     DiscreteFourierKernel(kf, g)
 end
 
-function _eval_sincs!(buf, ks, Rs)
+function _eval_sincs!(buf, ks, rs)
     offsets_long = (0, cumsum(length.(ks))...)
     offsets = ntuple(d -> offsets_long[d], Val(length(ks)))
     Nk = sum(length, ks)
@@ -200,13 +200,14 @@ function _eval_sincs!(buf, ks, Rs)
         off = offsets[i]
         kvec = ks[i]
         v = view(buf, (off + 1):(off + length(kvec)))
-        _eval_sincs_1D!(v, kvec, Rs[i])
+        _eval_sincs_1D!(v, kvec, rs[i])
     end
     buf, offsets
 end
 
-function _eval_sincs_1D!(buf, ks, R)
+function _eval_sincs_1D!(buf, ks, r)
     N = length(ks)
+    R = r / 2π
     @inbounds for n = 1:N
         buf[n] = sinc(ks[n] * R)
     end
@@ -217,11 +218,12 @@ function materialise!(kf::DiscreteFourierKernel, g::EllipsoidalKernel)
     ks = wavenumbers(kf)
     u = data(kf)
     Ls = 2π ./ getindex.(ks, 2)  # domain size: L = 2π / k[2]
-    Rs = g.diameters ./ Ls
+    rs = g.diameters
+    Rs = rs ./ 2π
     A = area(g)
     @inbounds @threads for I in CartesianIndices(u)
         kvec = getindex.(ks, Tuple(I))
-        kr = sqrt(sum(abs2, kvec .* Rs))  # = √[(kx * rx / Lx)^2 + (ky * ry / Ly)^2]
+        kr = sqrt(sum(abs2, kvec .* Rs))  # = √[(kx * rx / 2π)^2 + (ky * ry / 2π)^2]
         u[I] = A * J1norm(kr)
     end
     DiscreteFourierKernel(kf, g)
