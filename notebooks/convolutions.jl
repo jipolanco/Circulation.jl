@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.12.20
+# v0.14.7
 
 using Markdown
 using InteractiveUtils
@@ -138,7 +138,7 @@ step_function(x, a, b) = a ≤ x < b
 # ╔═╡ 2927c7a4-0fe7-11eb-38de-41f91e223653
 let
 	N = 512
-	L = 2π
+	L = π
 	r = L / 4
 	x = range(0, L, length=N + 1)[1:N]
 	# g = step_function.(x, 0, r)
@@ -150,19 +150,19 @@ let
 	# smoothing(k) = 1  # no smoothing
 	fig, axes = plt.subplots(1, 2, figsize=(6, 3))
 	let ax = axes[1]
-		wF = @. sinc(kx * r / L) * (r / L) * smoothing(kx)
+		wF = @. sinc(kx * r / 2π) * (r / L) * smoothing(kx)
 		ax.plot(x, brfft(wF, N), ls=:solid, lw=1)
 		# wF = @. besselj1(π * kx * r / L) / (kx * L / π)
 		# wF[1, 1] = r / 2L
-		wF = @. besselj1_norm(kx * r / L) * (r / L) * smoothing(kx)
+		wF = @. besselj1_norm(kx * r / 2π) * (r / L) * smoothing(kx)
 		ax.plot(x, brfft(wF, N), ls=:solid, lw=1)
 		ax.plot(x, g, ls=:dotted, lw=2)
 	end
 	let ax = axes[2]
 		ax.plot(kx, real.(gF), lw=1, label = "real")
 		ax.plot(kx, imag.(gF), lw=1, label = "imag")
-		ax.plot(kx, sinc.(kx .* r / L) .* (r / L) .* smoothing.(kx), ls=:dashed, lw=1, label = "sinc")
-		ax.plot(kx, besselj1_norm.(kx .* r / L) .* (r / L) .* smoothing.(kx), label = "Bessel")
+		ax.plot(kx, sinc.(kx .* r / 2π) .* (r / L) .* smoothing.(kx), ls=:dashed, lw=1, label = "sinc")
+		ax.plot(kx, besselj1_norm.(kx .* r / 2π) .* (r / L) .* smoothing.(kx), label = "Bessel")
 		ax.set_xlim(-2, 160)
 		ax.legend()
 	end
@@ -174,27 +174,19 @@ kernel_square(x, y, r; L = 2π) =
 	[L^2 * step_function(x < π ? x : 2π - x, 0, r/2) *
 	 step_function(y < π ? y : 2π - y, 0, r/2) for x in x, y in y]
 
-# ╔═╡ 1bd240ea-0fef-11eb-293b-c9e8f84b4e06
-circle_step(x, y, r) = x^2 + y^2 ≤ r^2
-
-# ╔═╡ 67e2449a-0ff3-11eb-1481-8d020ffdb184
-kernel_circle(x, y, r; L = 2π) =
-	[L^2 * circle_step(x < π ? x : 2π - x, y < π ? y : 2π - y, r/2)
-	 for x in x, y in y]
-
 # ╔═╡ 390ed57a-0fec-11eb-09fe-6b20f5825dd3
 let
 	N = 512
 	r = 1.0
 	xlim = 0.55r
-	Ls = (2π, 2π)
+	Ls = (π, π)
 	Atotal = prod(Ls)
 	xy = map(L -> range(0, L, length=N + 1)[1:N], Ls)
 	x, y = xy
-	# g = kernel_square(x, y, r)
-	g = kernel_circle(x, y, r)
-	kx = rfftfreq(N, N)
-	ky = fftfreq(N, N)
+	g = kernel_square(x, y, r)
+	# g = kernel_circle(x, y, r)
+	kx = rfftfreq(N, 2π * N / Ls[1])
+	ky = fftfreq(N, 2π * N / Ls[2])
 	ks = (kx, ky)
 	kmax = max(maximum.(ks)...)
 	gF = rfft(g) ./ length(g)
@@ -202,7 +194,7 @@ let
 	levels_phys = -0.2:0.05:1.2
 	let ax = axes[1, 1]
 		ax.set_aspect(:equal)
-		cf = ax.contourf(x, y, g' ./ Atotal; levels = levels_phys)
+		cf = ax.contourf(x, y, g' ./ (2π)^2; levels = levels_phys)
 		fig.colorbar(cf, ax=ax)
 		ax.set_xlim(0, xlim)
 		ax.set_ylim(0, xlim)
@@ -218,7 +210,8 @@ let
 	end
 	let ax = axes[2, 1]
 		ax.set_aspect(:equal)
-		kernel = EllipsoidalKernel(r)
+		# kernel = EllipsoidalKernel(r)
+		kernel = RectangularKernel(r)
 		wF = DiscreteFourierKernel(kernel, ks).mat
 		w = brfft(wF, N) ./ Atotal
 		ax.set_xlim(0, xlim)
@@ -238,6 +231,14 @@ let
 	fig
 end
 
+# ╔═╡ 1bd240ea-0fef-11eb-293b-c9e8f84b4e06
+circle_step(x, y, r) = x^2 + y^2 ≤ r^2
+
+# ╔═╡ 67e2449a-0ff3-11eb-1481-8d020ffdb184
+kernel_circle(x, y, r; L = 2π) =
+	[L^2 * circle_step(x < π ? x : 2π - x, y < π ? y : 2π - y, r/2)
+	 for x in x, y in y]
+
 # ╔═╡ 2aa86a5c-1fff-11eb-1ec0-55209eccdc17
 benchmarks = true
 
@@ -252,8 +253,8 @@ begin
 	function load_psi_resolution(::Val{256}, ::Val{host}, resampling) where {host}
 		N = 256
 		slice = (:, :, 4)
-		workdir = host == :thinkpad ? "~/Work" : "~/Work/Shared"
-		filenames = expanduser("$workdir/data/gGP_samples/tangle/256/fields/*Psi.001.dat")
+		workdir = "~/Work"
+		filenames = expanduser("$workdir/Data/GP/gGP_samples/tangle/256/fields/*Psi.001.dat")
 		gp_input = ParamsGP((N, N, N); L = (2pi, 2pi, 2pi), c = 1, nxi = 1.5)
 		load_psi(gp_input, filenames; slice, resampling)
 	end
@@ -261,7 +262,7 @@ begin
 	function load_psi_resolution(::Val{1024}, ::Val{host}, resampling) where {host}
 		N = 1024
 		slice = 4  # in [0, 9]
-		workdir = host == :thinkpad ? nothing : "~/Work"
+		workdir = "~/Work"
 		filenames = expanduser("$workdir/data/Circulation/gGP/1024/2D/*2D_1024_slice$(slice)_t100.bin")
 		gp_input = ParamsGP((N, N); L = (2pi, 2pi), c = 1, nxi = 1.5)
 		load_psi(gp_input, filenames; resampling)
@@ -280,7 +281,7 @@ end
 
 # ╔═╡ 53b315bc-0fe4-11eb-30dc-a3785444134f
 gp, ψ = load_psi_resolution(
-	Val(1024),
+	Val(256),
 	Val(hostname),
 	resampling,
 );
