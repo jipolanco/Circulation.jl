@@ -1,6 +1,7 @@
 # Circulation.jl
 
-Computation of velocity circulation statistics from Navier-Stokes and Gross-Pitaevskii data.
+Computation of velocity circulation statistics from Navier-Stokes (NS) and
+Gross-Pitaevskii (GP) data.
 
 ## System requirements
 
@@ -38,7 +39,35 @@ julia --project -e "using Pkg; Pkg.instantiate()"
 
 ## Running the examples
 
-### 1. Analysing GP (quantum turbulence) data
+### 1. Analysing velocity fields (e.g. from NS simulations)
+
+#### Generating sample data
+
+In this example, we compute circulation statistics on a synthetic velocity field generated using the [`scripts/synthetic.jl`](scripts/synthetic.jl) script.
+Note that the script requires an extra set of dependencies, specified in [`scripts/Project.toml`](scripts/Project.toml).
+To automatically install them, first run
+
+```bash
+julia --project=scripts -e "using Pkg; Pkg.instantiate()"
+```
+
+Then, run the script as follows:
+
+```bash
+julia --project=scripts scripts/synthetic.jl
+```
+
+This will in particular generate binary files `VI*_d.000.dat` on the root directory, containing the three components of the synthetic velocity field.
+To analyse them, move them to `sample_data/NS/`:
+
+```bash
+mv -v VI*_d.000.dat sample_data/NS/
+```
+
+#### Computing circulation statistics
+
+
+### 2. Analysing GP (quantum turbulence) data
 
 First, download the sample data available from [Zenodo](https://doi.org/10.5281/zenodo.5510350), and put the `ReaPsi.001.dat` and `ImaPsi.001.dat` under `sample_data/GP/`.
 These two files are raw binary files containing the real and imaginary parts of a three-dimensional complex wave number field.
