@@ -44,26 +44,24 @@ First, download the sample data available from [Zenodo](https://doi.org/10.5281/
 These two files are raw binary files containing the real and imaginary parts of a three-dimensional complex wave number field.
 This field is an instantaneous numerical solution of the generalised Gross-Pitaevskii (GP) equations at a resolution of 256³ collocation points.
 
-To analyse the data, run the `examples/circulation_GP.jl` script as follows, from the root directory of this project:
+To analyse the data, run the [`examples/circulation_GP.jl`](examples/circulation_GP.jl) script as follows, from the root directory of this project:
 
 ```bash
 export JULIA_NUM_THREADS=4  # optional, to use threads
 julia --project examples/circulation_GP.jl
 ```
 
-This will generate a `circulation_GP.h5` file with the circulation statistics of the field.
+Note that the script is fully commented and may be easily modified.
+
+This will generate a `circulation_GP.h5` file containing the circulation statistics of the field.
 
 ## Output files
 
 Histograms and moments are written to a binary HDF5 file.
 The path to the output file is specified in the parameter file.
-A single HDF5 file contains circulation statistics for the velocity, the
-regularised velocity and momentum.
-
+A single HDF5 file may contain circulation statistics for the velocity, the
+regularised velocity (GP only) and momentum (GP only).
 HDF5 files are easy to read in different languages.
-In Python, the `h5py` package can be used.
-For an example of how to read statistics in Python, see
-[`plot_stats.py`](scripts/plot_stats.py).
 
 HDF5 files have a filesystem-like structure, where each "directory" is called
 a *group*.
@@ -81,40 +79,28 @@ The structure of the output HDF5 files looks something like the following:
 
 # Circulation statistics
 /Circulation                    Group
-    /loop_sizes                 Dataset {51}
-    /Momentum                   Group
+    /Velocity                   Group
+        /kernel_area            Dataset {16}      # area of convolution kernels
+        /kernel_lengths         Dataset {16, 2}   # size (rx, ry) of rectangular kernels
+        /kernel_shape           Dataset {SCALAR}  # e.g. "RectangularKernel"
+        /kernel_size            Dataset {16}      # linear size of convolution kernels
+        /resampled_grid         Dataset {SCALAR}  # boolean; true if circulation was computed in resampled grid
+        /resampling_factor      Dataset {SCALAR}  # integer
+
         /Histogram              Group
-            /bin_edges          Dataset {8100}
-            /hist               Dataset {51, 8099}
-            /total_samples      Dataset {51}
-        /Moments                Group
-            /M_abs              Dataset {51, 20}
-            /M_odd              Dataset {51, 10}
-            /p_abs              Dataset {20}
-            /p_odd              Dataset {10}
+            /bin_edges          Dataset {4000}
+            /hist               Dataset {51, 3999}
+            /maximum            Dataset {16}
+            /minimum            Dataset {16}
             /total_samples      Dataset {51}
 
-    # These also include Histogram and Moments groups
-    /RegVelocity                Group
-    /Velocity                   Group
+        /Moments                Group
+            /M_abs              Dataset {16, 10}  # moments ⟨ |Γ|^p ⟩
+            /M_odd              Dataset {16, 5}   # moments ⟨ Γ^p ⟩ for p odd
+            /p_abs              Dataset {20}      # values of p associated to M_abs
+            /p_odd              Dataset {10}      # values of p associated to M_odd
+            /total_samples      Dataset {51}
 ```
 
 (You can use the command-line utility `h5ls` to see the file structure.)
-
-So, for instance, to read `kappa` and the velocity histogram data in Python:
-
-```py
-import h5py
-
-with h5py.File('filename.h5', 'r') as ff:
-    kappa = ff['/ParamsGP/kappa'][()]                        # scalar
-    hist = ff['/Circulation/Velocity/Histogram/hist'][:, :]  # matrix
-
-    # Alternative:
-    g = ff['/ParamsGP']  # HDF5 group with parameters
-    kappa = g['kappa'][()]
-
-    g = ff['/Circulation/Velocity/Histogram']
-    hist = g['hist'][:, :]
-```
 
