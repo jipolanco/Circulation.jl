@@ -1,8 +1,8 @@
-# Circulation
+# Circulation.jl
 
-Computation of circulation from GP data.
+Computation of velocity circulation statistics from Navier--Stokes and Gross--Pitaevskii data.
 
-Most of the code is in the two local modules `GPFields` and `Circulation`.
+Most of the code is in the two submodules `GPFields` and `GPStatistics`.
 
 ## Setup
 
@@ -17,24 +17,14 @@ julia --project -e "using Pkg; Pkg.instantiate()"
 Circulation statistics are computed by the
 [`circulation.jl`](scripts/circulation.jl) script.
 
-### Parameter file
-
-The script expects a parameter file in TOML format.
-See [`tangle.toml`](examples/tangle.toml) for an example, which includes
-documentation for all possible parameters.
-In particular, there you can set the path to the simulation data.
-
-### Running the script
+### Running the examples
 
 The script can be run from any subdirectory of this project as:
 
 ```bash
 export JULIA_NUM_THREADS=4  # optional, to use threads
-julia --project scripts/circulation.jl parameter_file.toml
+julia --project examples/circulation_tangle.jl
 ```
-
-The `--project` is important as it allows Julia to find the local modules
-`GPFields` and `Circulation`.
 
 If you want to run the script from a different directory, call Julia with
 `--project=/path/to/this/project`.
@@ -108,6 +98,5 @@ with h5py.File('filename.h5', 'r') as ff:
 ### Running on a cluster
 
 See the example files in [`examples/idris`](examples/idris), which include a
-SLURM submission script and a sample parameter file used in the Jean-Zay
-cluster.
-These files should be modified for Occigen!
+SLURM submission script and a sample parameter file used in the [Jean-Zay
+cluster](http://www.idris.fr/jean-zay/).
