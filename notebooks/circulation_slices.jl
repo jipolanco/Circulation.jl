@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.12.5
+# v0.16.0
 
 using Markdown
 using InteractiveUtils
@@ -55,12 +55,23 @@ function coarse_grain(Γ_fine, r)
 	Γ
 end
 
+# ╔═╡ 6b55f935-70d4-4729-a97f-8cc3e1cd79bf
+plt.close(:all)
+
 # ╔═╡ c63357ce-0719-11eb-3222-219e0ceecdd5
 function make_transparent_cmap(cmap_base)
 	# This only works if cmap_base is a matplotlib.colors.LinearSegmentedColormap
 	# https://matplotlib.org/api/_as_gen/matplotlib.colors.LinearSegmentedColormap.html
 	cdict = cmap_base._segmentdata
-	r, g, b = getindex.(Ref(cdict), ("red", "green", "blue"))
+	r, g, b = let
+		rgb = getindex.(Ref(cdict), ("red", "green", "blue"))
+		map(rgb) do x
+			y = permutedims(x)
+			T = eltype(y)
+			@assert y isa Matrix && size(y, 1) == 3
+			Array(vec(reinterpret(NTuple{3, T}, y)))
+		end
+	end
 	alpha = similar(r)
 	T = eltype(r[1])
 	N = length(alpha)
@@ -169,8 +180,7 @@ end
 begin
 	
 function load_psi_tangle(::Val{256}, resampling)
-	workdir = gethostname() == "thinkpad" ? "~/Work" : "~/Work/Shared"
-	filenames = expanduser("$workdir/data/gGP_samples/tangle/256/fields/*Psi.001.dat")
+	filenames = expanduser("~/Work/Data/GP/gGP_samples/tangle/256/fields/*Psi.001.dat")
 	gp_in = ParamsGP((256, 256, 256); L = (2π, 2π, 2π), c = 1.0, nxi = 1.5)
 	slice = (:, :, 3)
 	gp = ParamsGP(gp_in, slice)
@@ -374,8 +384,9 @@ fig_slice.savefig("circulation_slice.svg")
 # ╟─ec362e78-06e5-11eb-0627-3d164ec60a17
 # ╠═49293646-04c2-11eb-19fb-05609f24f2c6
 # ╠═c3f9b778-0705-11eb-0d57-87de6a741735
-# ╟─c63357ce-0719-11eb-3222-219e0ceecdd5
-# ╟─2a8579aa-0715-11eb-2182-01856621ec2c
+# ╠═6b55f935-70d4-4729-a97f-8cc3e1cd79bf
+# ╠═c63357ce-0719-11eb-3222-219e0ceecdd5
+# ╠═2a8579aa-0715-11eb-2182-01856621ec2c
 # ╟─287f2998-071b-11eb-1530-596effb8e8b3
 # ╟─731478ec-070b-11eb-28b6-573261e0bb10
 # ╟─e139a206-06ee-11eb-08a5-295e7d32d4f2
