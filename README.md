@@ -2,9 +2,35 @@
 
 Computation of velocity circulation statistics from Navier-Stokes and Gross-Pitaevskii data.
 
-## Setup
+## System requirements
 
-To install the required packages, run the following from the command line:
+This software is known to work on Linux systems.
+In particular, it has run on Fedora 34, Ubuntu 21.04, and RHEL 8.
+It will likely also work on other operating systems.
+
+The software requires Julia 1.6 or above.
+See below for installation details.
+We take advantage of a number of Julia packages.
+The full list of dependencies is listed in the different `Project.toml` files, while the actual version numbers that have been known to work are listed in `Manifest.toml`.
+As detailed below, the Julia package manager allows to easily install the very same versions of the packages listed in the manifest.
+
+This software runs on standard CPUs.
+It is possible to take advantage of the availability of multiple shared-memory CPUs for thread-based parallelisation.
+
+## Installation
+
+To use this software, it is necessary to install Julia and the Julia packages needed for the software to run.
+Luckily, this is very easy to do thanks to Julia's built-in package manager.
+The installation should typically last about 15 minutes on a normal desktop computer.
+
+### 1. Installing Julia
+
+Julia may be installed by downloading the binaries at the [Julia website](https://julialang.org/downloads/).
+Please see that link for more details.
+
+### 2. Installing dependencies
+
+Once Julia has been installed, run the following from the root directory of this project to install the dependencies:
 
 ```bash
 julia --project -e "using Pkg; Pkg.instantiate()"
