@@ -40,9 +40,9 @@ julia --project -e "using Pkg; Pkg.instantiate()"
 
 ### 1. Analysing GP (quantum turbulence) data
 
-First, download the sample data available from [Zenodo](https://doi.org/10.5281/zenodo.5510350), and put the `ReaPsi.001.dat` and `ImaPsi.001.dat` under `test_data/GP/`.
+First, download the sample data available from [Zenodo](https://doi.org/10.5281/zenodo.5510350), and put the `ReaPsi.001.dat` and `ImaPsi.001.dat` under `sample_data/GP/`.
 These two files are raw binary files containing the real and imaginary parts of a three-dimensional complex wave number field.
-This field is an instantaneous numerical solution of the generalised Gross-Pitaevskii (GP) equations at a resolution of $256^3$ collocation points.
+This field is an instantaneous numerical solution of the generalised Gross-Pitaevskii (GP) equations at a resolution of 256³ collocation points.
 
 To analyse the data, run the `examples/circulation_GP.jl` script as follows, from the root directory of this project:
 
