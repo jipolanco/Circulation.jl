@@ -1,6 +1,5 @@
-#!/usr/bin/env julia
-
-# Generate 3D grid of vortices from circulation.
+# Detect discrete vortices from GP data via computation of circulation over
+# small loops.
 
 using GPFields
 

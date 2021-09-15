@@ -1,5 +1,3 @@
-#!/usr/bin/env julia
-
 using HDF5
 using WriteVTK
 

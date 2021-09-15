@@ -1,5 +1,3 @@
-#!/usr/bin/env julia
-
 # Generate synthetic incompressible 3D velocity field with energy spectrum E ~ k^{-α}.
 
 using LinearAlgebra
