@@ -154,7 +154,7 @@ function r_indices_to_plot(rs)
     # collect(subinds)  # we want an AbstractVector...
     if N > 30
         # inds[12:2:(N - 6)]  # case of 2048^3 data
-        inds[13:1:(N - 8)]
+        inds[14:1:(N - 10)]
     else
         inds[4:1:N-6]
     end
@@ -285,7 +285,16 @@ function plot_normal_pdf!(ax, xs; kws...)
     ax.plot(xs, ys; color = "tab:red", ls = :dashed, lw = 1.5, kws...)
 end
 
-function plot_pdf_Γr!(ax, stats; cmap = plt.cm.viridis_r)
+function write_distances(fname, rs; varname = nothing)
+    open(fname, "w") do ff
+        if varname !== nothing
+            println(ff, "# (1) i  (2) $varname  (3) ($varname)^2")
+        end
+        writedlm(ff, zip(eachindex(rs), rs, rs.^2))
+    end
+end
+
+function plot_pdf_Γr!(ax, stats; cmap = plt.cm.viridis_r, write_data = false)
     histograms = stats.histograms_Γ
 
     hists = histograms.hist
@@ -294,12 +303,20 @@ function plot_pdf_Γr!(ax, stats; cmap = plt.cm.viridis_r)
     As = stats.As
     λ = stats.taylor_scale
 
+    rs_λ = stats.rs ./ λ
+
     ax.set_yscale(:log)
     ax.set_xlim(-20, 20)
     ax.set_xlabel(L"Γ_r / \left< Γ_r^2 \right>^{1/2}")
     ax.set_ylabel("Probability")
     r_indices = r_indices_to_plot(As)
     cmap_norm = mappable_colour(cmap, r_indices)
+
+    if write_data
+        write_distances(
+            "pdf.rs_lambda.dat", @view(rs_λ[r_indices]); varname = "r / lambda",
+        )
+    end
 
     for (i, r) in enumerate(r_indices)
         color = cmap_norm(i)
@@ -321,8 +338,12 @@ function plot_pdf_Γr!(ax, stats; cmap = plt.cm.viridis_r)
         xs ./= xrms
 
         xs_centre = @views (xs[1:end-1] .+ xs[2:end]) ./ 2
-        # r_η = round(stats.rs_η[r], digits=0)
-        r_λ = round(stats.rs[r] / λ, digits = 2)
+        r_λ = round(rs_λ[r], digits = 2)
+
+        if write_data
+            writedlm("pdf.r$i.dat", zip(xs_centre, pdf))
+        end
+
         ax.plot(
             xs_centre, pdf;
             # marker = ".",
@@ -335,7 +356,11 @@ function plot_pdf_Γr!(ax, stats; cmap = plt.cm.viridis_r)
     ax
 end
 
-function plot_condpdfs!(ax, stats; rind = nothing, εind = nothing, cmap)
+function plot_condpdfs!(
+        ax, stats;
+        rind = nothing, εind = nothing, cmap,
+        write_data = false,
+    )
     histograms = stats.histograms2D
     conditional = histograms.conditional
     using_enstrophy = stats.using_enstrophy
@@ -387,6 +412,16 @@ function plot_condpdfs!(ax, stats; rind = nothing, εind = nothing, cmap)
         end
     end
 
+    if write_data
+        write_distances(
+            "condpdf.rs_lambda.dat", @view(rs_λ[pdf_indices]);
+            varname = "r / lambda",
+        )
+        if !isnothing(εind)
+            writedlm("condpdf.eps_range.dat", ε_range ./ ε_norm)
+        end
+    end
+
     ax.text(
         0.02, 0.98, text;
         ha = :left, va = :top, transform = ax.transAxes,
@@ -425,6 +460,11 @@ function plot_condpdfs!(ax, stats; rind = nothing, εind = nothing, cmap)
         xs ./= xrms
 
         xs_centre = @views (xs[1:end-1] .+ xs[2:end]) ./ 2
+
+        if write_data
+            writedlm("condpdf.r$n.dat", zip(xs_centre, pdf))
+        end
+
         ax.plot(
             xs_centre, pdf;
             # marker = ".",
@@ -592,11 +632,11 @@ function plot_pdf_εr!(ax, stats; logpdf = false, cmap = plt.cm.viridis_r)
     ax
 end
 
-function plot_pdfs(stats; εind = 2, rind = 8)
+function plot_pdfs(stats; εind = 2, rind = 8, write_data = false)
     fig, axes = plt.subplots(2, 2; figsize = 0.9 .* (8, 6), sharey = true)
     using_enstrophy = stats.using_enstrophy
     let ax = axes[1, 1]
-        plot_pdf_Γr!(ax, stats; cmap = plt.cm.viridis_r)
+        plot_pdf_Γr!(ax, stats; cmap = plt.cm.viridis_r, write_data)
         ax.set_xlim(-10, 10)
         ax.set_ylim(1e-6, 1)
         ax.legend(
@@ -628,7 +668,7 @@ function plot_pdfs(stats; εind = 2, rind = 8)
         )
     end
     let ax = axes[1, 2]
-        plot_condpdfs!(ax, stats; εind, cmap = plt.cm.viridis_r)
+        plot_condpdfs!(ax, stats; εind, cmap = plt.cm.viridis_r, write_data)
         ax.set_xlim(-10, 10)
         ax.set_ylim(1e-6, 1)
         ax.set_ylabel("")
@@ -637,11 +677,14 @@ function plot_pdfs(stats; εind = 2, rind = 8)
             fontsize = "x-small",
         )
     end
-    # fig.savefig("pdfs.svg", dpi=300)
+    fig
 end
 
-function dissipation_bin_text(xs, i, xmean)
-    x_range = round.((xs[i], xs[i + 1]) ./ xmean, digits = 2)
+dissipation_bin(xs, i, xmean) = (xs[i], xs[i + 1]) ./ xmean
+
+function dissipation_bin_text(args...)
+    x_bin = dissipation_bin(args...)
+    x_range = round.(x_bin, digits = 2)
     string(x_range)
 end
 
@@ -777,6 +820,7 @@ function plot_circulation_scaling_exponents!(
         ax, stats, moments;
         plot_selfsimilar = false,
         compensate = false,
+        write_data = false,
     )
     ps = moments.ps
 
@@ -784,8 +828,19 @@ function plot_circulation_scaling_exponents!(
     εs = moments.εs
     ε_mean = stats.ε_mean
 
+    conditioned = εs !== nothing
+
     Np, Nε = size(slopes_fitted)
     ε_ind_max = min(10, Nε)
+
+    if conditioned
+        open("exponents.eps_ranges.dat", "w") do ff
+            for k in 1:ε_ind_max
+                a, b = round.(dissipation_bin(εs, k, ε_mean), digits = 2)
+                println(ff, "$a\t$b")
+            end
+        end
+    end
 
     ax.set_xlabel(L"p")
     ax.set_xlim((extrema(ps) .+ (-1, 1))...)
@@ -800,14 +855,22 @@ function plot_circulation_scaling_exponents!(
     cmap_ε = cmap_dissipation_exponents(εs, ε_ind_max)
 
     for k in 1:ε_ind_max
-        if isnothing(εs)
-            color = :black
-            marker = :x
-        else
+        if conditioned
             color = cmap_ε(εs[k])
             marker = :o
+            fname = "exponents_cond_eps$k.dat"
+        else
+            color = :black
+            marker = :x
+            fname = "exponents_base.dat"
         end
         y = slopes_fitted[:, k]
+        if write_data
+            open(fname, "w") do ff
+                println(ff, "# (1) p  (2) lambda_p")
+                writedlm(ff, zip(ps, y))
+            end
+        end
         if compensate
             @. y = 4/3 * ps - y
         end
@@ -982,14 +1045,17 @@ function plot_circulation_moments(stats, moments; kws...)
 end
 
 function plot_circulation_scaling_exponents(
-        stats, moments_orig, moments_cond; compensate = false,
+        stats, moments_orig, moments_cond;
+        compensate = false, write_data = false,
     )
     fig, ax = plt.subplots(figsize = (4, 3) .* 0.8)
     plot_circulation_scaling_exponents!(
-        ax, stats, moments_cond; plot_selfsimilar = false, compensate,
+        ax, stats, moments_cond;
+        plot_selfsimilar = false, compensate, write_data,
     )
     plot_circulation_scaling_exponents!(
-        ax, stats, moments_orig; plot_selfsimilar = true, compensate,
+        ax, stats, moments_orig;
+        plot_selfsimilar = true, compensate, write_data,
     )
     ax.legend(frameon = false, title = latexstring("ε_r / $TEX_MEAN_ε"), fontsize = :small)
     # fig.savefig("exponents.png"; dpi = 300)
@@ -1077,8 +1143,15 @@ end
 
 function make_plots(stats, moments, moments_cond)
     ess = false
+    write_data = false
 
-    plot_pdfs(stats; rind = 12, εind = 2)
+    fig = plot_pdfs(stats; rind = 12, εind = 2, write_data)
+    # fig.savefig("pdfs.png")
+
+    fig = plot_circulation_scaling_exponents(
+        stats, moments, moments_cond; write_data)
+    # fig.savefig("exponents.png")
+
     return
     # plot_dissipation_stats(stats)
     # plot_circulation_moments(stats, moments; ess)
@@ -1086,7 +1159,6 @@ function make_plots(stats, moments, moments_cond)
     # plot_conditional_moments(stats, moments_cond; ess, ε_ind = 2)
     plot_conditional_moments(stats, moments_cond; ess, ε_ind = 3)
     # plot_conditional_moments(stats, moments_cond; ess, ε_ind = 9)
-    plot_circulation_scaling_exponents(stats, moments, moments_cond)
     # plot_circulation_flatness(stats, moments, moments_cond)
 
     nothing
