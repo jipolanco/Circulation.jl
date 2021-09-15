@@ -1,8 +1,6 @@
 # Circulation.jl
 
-Computation of velocity circulation statistics from Navier--Stokes and Gross--Pitaevskii data.
-
-Most of the code is in the two submodules `GPFields` and `GPStatistics`.
+Computation of velocity circulation statistics from Navier-Stokes and Gross-Pitaevskii data.
 
 ## Setup
 
@@ -12,25 +10,21 @@ To install the required packages, run the following from the command line:
 julia --project -e "using Pkg; Pkg.instantiate()"
 ```
 
-## Circulation statistics
+## Running the examples
 
-Circulation statistics are computed by the
-[`circulation.jl`](scripts/circulation.jl) script.
-
-### Running the examples
-
-The script can be run from any subdirectory of this project as:
+Different examples may be found in the `examples/` subdirectory.
+The examples may be run as:
 
 ```bash
 export JULIA_NUM_THREADS=4  # optional, to use threads
 julia --project examples/circulation_tangle.jl
 ```
 
-If you want to run the script from a different directory, call Julia with
+To run the examples from a different directory, call Julia with
 `--project=/path/to/this/project`.
 Alternatively, set the `JULIA_PROJECT` environment variable to this path.
 
-### Output file
+## Output files
 
 Histograms and moments are written to a binary HDF5 file.
 The path to the output file is specified in the parameter file.
