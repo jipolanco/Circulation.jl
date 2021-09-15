@@ -20,7 +20,12 @@ function make_loop_sizes(; base, dims)
 end
 
 function main()
+    # ====================================================================== #
+    # Start of parameter section
+    # ====================================================================== #
+
     dims = (256, 256, 256)  # resolution of input fields
+
     gp = ParamsGP(
         dims,
         L = (2π, 2π, 2π),   # domain size
@@ -28,7 +33,17 @@ function main()
         nxi = 1.5,          # normalised healing length
     )
 
-    resampling_factor = 4   # higher is better (but slower and uses more memory)
+    # Resampling factor: increases the resolution of analysed fields.
+    # This makes sense for GP data, to avoid issues related to the singularity
+    # of the velocity field at vortex locations.
+    # Higher resampling factor is generally better (but slower, and uses more
+    # memory).
+    # For NS data, resampling should not be used (i.e. resampling_factor = 1).
+    resampling_factor = 4
+
+    # If true, compute statistics on resampled (fine) grid.
+    # This may be used to increase the number of statistics samples, but in
+    # general it doesn't make a big difference.
     compute_in_resampled_grid = false
 
     # Sizes of square loops to analyse
@@ -48,8 +63,8 @@ function main()
     )
 
     circulation = (
-        max_slices = typemax(Int),  # compute over all possible 2D cuts of the domain (better)
-        # max_slices = 4,  # or compute over a subset of slices (faster)
+        # max_slices = typemax(Int),  # compute over all possible 2D cuts of the domain (better)
+        max_slices = 4,  # or compute over a subset of slices (faster)
         eps_velocity = 0,  # this is for regularisation of GP velocity fields (0 => no regularisation)
 
         # Parameters for circulation moments.
@@ -66,6 +81,10 @@ function main()
         ),
     )
 
+    # ====================================================================== #
+    # End of parameter section
+    # ====================================================================== #
+
     @info "Loop sizes: $loop_sizes ($(length(loop_sizes)) sizes)"
     @info "Resampling factor: $resampling_factor"
     if resampling_factor > 1
@@ -81,12 +100,13 @@ function main()
 
     # Which fields to analyse.
     which = if data_params.load_velocity
-        # If a velocity field is loaded
+        # If a velocity field is loaded (NS):
         (
             VelocityLikeFields.Velocity,
         )
     else
-        # If a wave function field is loaded
+        # If a wave function field is loaded (GP), we compute circulation from
+        # velocity v and from regularised velocity v * √ρ.
         (
             VelocityLikeFields.Velocity,
             VelocityLikeFields.RegVelocity,
@@ -116,7 +136,7 @@ function main()
         )
     end
 
-    # This is just to precompile functions and to get better timings.
+    # This is just to precompile functions and get better timings.
     analyse!(stats, gp, data_params; max_slices=1, kwargs...)
     reset_timer!(to)
     reset!(stats)
@@ -130,6 +150,7 @@ function main()
 
     println(to)
 
+    # Write results
     let outfile = output.statistics
         mkpath(dirname(outfile))
         @info "Saving $(outfile)"
