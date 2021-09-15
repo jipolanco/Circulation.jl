@@ -1,7 +1,4 @@
 # Compute circulation statistics in turbulent tangle.
-#
-# Note that the analysis parameters are directly written to this file, and TOML
-# parameter files are not used.
 
 using GPFields
 using GPStatistics
