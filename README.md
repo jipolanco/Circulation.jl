@@ -11,10 +11,13 @@ Gross-Pitaevskii (GP) data.
   1. [Analysing velocity fields (e.g. from NS simulations)](#1-analysing-velocity-fields-eg-from-ns-simulations)
   2. [Analysing GP (quantum turbulence) data](#2-analysing-gp-quantum-turbulence-data)
   3. [Detecting discrete vortices from GP data](#3-detecting-discrete-vortices-from-gp-data)
+- [Requirements on input data](#requirements-on-input-data)
 - [Output files](#output-files)
 - [References](#references)
 
 ## System requirements
+
+### Software requirements
 
 This software is known to work on Linux and MacOS systems.
 In particular, it has run on Fedora 34, Ubuntu 21.04, RHEL 8, and MacOS 11.2.3.
@@ -23,8 +26,27 @@ It will likely also work on other operating systems.
 The software requires Julia 1.6 or above.
 See below for installation details.
 We take advantage of a number of Julia packages, in particular [FFTW.jl](https://github.com/JuliaMath/FFTW.jl) and [HDF5.jl](https://github.com/JuliaIO/HDF5.jl), which wrap the corresponding C libraries.
-The full list of dependencies is listed in the different `Project.toml` files, while the actual version numbers that have been known to work are detailed in `Manifest.toml`.
-As illustrated further below, the Julia package manager allows to easily install the very same versions of the packages listed in the manifest files.
+The full list of dependencies is listed in the different `Project.toml` files, while the actual version numbers that have been known to work are detailed in the `Manifest.toml` files.
+
+Below we list the main dependencies of this software.
+Note that these do not need to be manually installed, as they are automatically installed by the Julia package manager (as detailed in the next sections).
+
+The main Julia dependencies, and the versions on which the software has been tested, are:
+
+- [FFTW.jl](https://github.com/JuliaMath/FFTW.jl) v1.4.5
+- [HDF5.jl](https://github.com/JuliaIO/HDF5.jl) v0.15.6
+- [SpecialFunctions.jl](https://github.com/JuliaMath/SpecialFunctions.jl) v1.6.1
+- [TimerOutputs.jl](https://github.com/KristofferC/TimerOutputs.jl) v0.5.12
+
+Additional dependencies required for plotting, visualisation and generation of synthetic velocity fields:
+
+- [CairoMakie.jl](https://github.com/JuliaPlots/Makie.jl/tree/master/CairoMakie) v0.6.5
+- [LaTeXStrings.jl](https://github.com/stevengj/LaTeXStrings.jl) v1.2.1
+- [StaticArrays.jl](https://github.com/JuliaArrays/StaticArrays.jl) v1.2.12
+- [UnicodePlots.jl](https://github.com/JuliaPlots/UnicodePlots.jl) v2.4.2
+- [WriteVTK.jl](https://github.com/jipolanco/WriteVTK.jl) v1.10.1
+
+### Hardware requirements
 
 This software runs on standard CPUs.
 It is possible to take advantage of the availability of multiple shared-memory CPUs for thread-based parallelisation.
@@ -169,6 +191,23 @@ julia --project examples/vortices_to_vtk.jl
 For instance, by opening both the generated `vortices_Z_negative.vtp` and `vortices_Z_positive.vtp` files and using different colours for each dataset, one can obtain a vortex visualisation as in the following image:
 
 ![Discrete vortex visualisation.](docs/vortices_GP256_z.png)
+
+## Requirements on input data
+
+The above scripts take velocity or wave-function fields in raw binary format, in double-precision floating point format (`Float64` in Julia):
+
+- Three-dimensional **velocity fields** should be given as three separate files, one for each velocity component.
+  Filenames should follow the format `VI{x,y,z}_d.TTT.dat`, where `TTT` is a three-digit number (typically corresponding to a simulation timestep).
+
+- Three-dimensional **wave-function fields** should be given as two separate files, one for the real part and the other for the imaginary part of the field.
+  Filenames should follow the format `{Rea,Ima}Psi.TTT.dat`, where `TTT` is, as above, a three-digit number.
+
+Note that the fields are interpreted in [column-major order](https://en.wikipedia.org/wiki/Row-_and_column-major_order), as usual in languages such as Julia and Fortran.
+If the data was generated in row-major order (e.g. if it was generated in Python or in C/C++), this means that the Cartesian directions used in the Julia scripts will be inverted with respect to their original definitions.
+
+Also note that the data is expected to follow the same [endianness](https://en.wikipedia.org/wiki/Endianness) as the system where the scripts are executed.
+If the data was generated in the same or a similar system, this is usually not a problem.
+However, if the data was generated on an architecture with a different endienness, the data will need to be reordered before performing the analyses.
 
 ## Output files
 
