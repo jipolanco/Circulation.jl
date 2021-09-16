@@ -104,7 +104,7 @@ julia --project=examples/plots -e "using Pkg; Pkg.instantiate()"
 Then, the results may be plotted by running
 
 ```bash
-julia --project=examples/plots examples/plots/circulation.jl
+julia --project=examples/plots examples/plots/circulation.jl circulation_NS.h5
 ```
 
 Note that these operations may take a while due to Julia's [time to first plot](https://discourse.julialang.org/t/time-to-first-plot-clarification/58534) problem (but things are quickly improving!).
@@ -130,6 +130,8 @@ Note that the script is fully commented and may be easily modified.
 
 This will generate a `circulation_GP.h5` file containing the circulation statistics of the field.
 See [Output files](#output-files) below for the typical structure of these files.
+
+Similarly to the Navier-Stokes case, contents of this file may be plotted using the [`examples/plots/circulation.jl`](examples/plots/circulation.jl) script.
 
 ## Output files
 
