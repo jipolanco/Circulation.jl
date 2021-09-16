@@ -116,7 +116,7 @@ Note that these operations may take a while due to Julia's [time to first plot](
 
 The script will generate a `circulation_NS.svg` file with the figure, which should look like the following:
 
-![Circulation statistics from synthetic velocity field](docs/circulation_NS.svg)
+![Circulation statistics from synthetic velocity field.](docs/circulation_NS.svg)
 
 ### 2. Analysing GP (quantum turbulence) data
 
@@ -138,7 +138,11 @@ On a normal desktop computer, analysing the full 256³ wave function field using
 This will generate a `circulation_GP.h5` file containing the circulation statistics of the field.
 See [Output files](#output-files) below for the typical structure of these files.
 
-Similarly to the Navier-Stokes case, contents of this file may be plotted using the [`examples/plots/circulation.jl`](examples/plots/circulation.jl) script.
+Similarly to the Navier-Stokes case, contents of this file may be plotted using the [`examples/plots/circulation.jl`](examples/plots/circulation.jl) script:
+
+![Circulation statistics from sample GP field.](docs/circulation_GP.svg)
+
+The probability distributions on the right clearly illustrate the quantised nature of circulation in quantum fluids, taking values that are multiples of the quantum of circulation κ.
 
 ### 3. Detecting discrete vortices from GP data
 
@@ -154,7 +158,7 @@ Results will be saved to a `vortices.h5` file in the root directory.
 
 On a normal desktop computer, analysing the full 256³ wave function field using 4 threads with `resampling_factor = 4` (see script) should take about 1 minute.
 
-To visualise the detected vortices, a [`vortices_to_vtk.jl`](examples/vortices_to_vtk.jl) script can be used to generate a VTK file, which can be opened in ParaView:
+To visualise the detected vortices, a [`vortices_to_vtk.jl`](examples/vortices_to_vtk.jl) script can be used to generate VTK files which can then be opened in ParaView:
 
 ```bash
 julia --project examples/vortices_to_vtk.jl

@@ -76,8 +76,8 @@ function main()
 
         # Parameters for circulation histograms / PDFs.
         histogram = (
-            Nedges = 1000,     # number of bin edges
-            max_kappa = 10.5,  # histogram extrema in units of quantum of circulation κ
+            Nedges = 4000,     # number of bin edges
+            max_kappa = 20.5,  # histogram extrema in units of quantum of circulation κ
         ),
     )
 
