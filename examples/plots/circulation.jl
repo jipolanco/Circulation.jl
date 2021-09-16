@@ -86,7 +86,7 @@ function make_plots(ff::HDF5.File)
             # scale.
             replace!(y -> iszero(y) ? oftype(y, NaN) : y, pdf)
 
-            label = string(round(rs[j], digits = 1))
+            label = string(round(rs[j], digits = 2))
             alpha = 0.8
             color = (colourmap[j / length(rs)], alpha)
 
