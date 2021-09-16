@@ -33,7 +33,6 @@ function make_plots(ff::HDF5.File)
 
     # Load loop sizes
     rs = read(g_base["kernel_size"]) :: Vector{Float64}
-    Nr = length(rs)
 
     # Load second-order moments (circulation variance)
     Γ_var = g_moments["M_abs"][2, :] :: Vector{Float64}
@@ -42,7 +41,12 @@ function make_plots(ff::HDF5.File)
 
     # 1. Plot circulation variance as a function of loop size
     let gl = fig[1, 1] = GridLayout()
-        ax = Axis(gl[1, 1]; xscale = log10, yscale = log10)
+        ax = Axis(
+            gl[1, 1];
+            xscale = log10, yscale = log10,
+            # xminorticksvisible = true, xminorticks = IntervalsBetween(9),
+            # yminorticksvisible = true, yminorticks = IntervalsBetween(9),
+        )
         ax.xlabel = "Loop size r"
         ax.ylabel = "Circulation variance"
 
@@ -74,7 +78,11 @@ function make_plots(ff::HDF5.File)
     # 2. Plot circulation PDF for different loop sizes
     let gl = fig[1, 2] = GridLayout()
         xlabel = is_GP ? L"Γ / \kappa" : L"Γ / ⟨ Γ^2 ⟩^{1/2}"
-        ax = Axis(gl[1, 1]; yscale = log10, xlabel)
+        ax = Axis(
+            gl[1, 1];
+            yscale = log10, xlabel,
+            # yminorticksvisible = true, yminorticks = IntervalsBetween(9),
+        )
         ax.ylabel = "Probability"
 
         if is_GP
