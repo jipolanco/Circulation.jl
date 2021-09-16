@@ -3,6 +3,14 @@
 Computation of velocity circulation statistics from Navier-Stokes (NS) and
 Gross-Pitaevskii (GP) data.
 
+## Contents
+
+- [System requirements](#system-requirements)
+- [Installation](#installation)
+- [Running the examples](#running-the-examples)
+- [Output files](#output-files)
+- [References](#references)
+
 ## System requirements
 
 This software is known to work on Linux systems.
@@ -11,7 +19,7 @@ It will likely also work on other operating systems.
 
 The software requires Julia 1.6 or above.
 See below for installation details.
-We take advantage of a number of Julia packages.
+We take advantage of a number of Julia packages, in particular [FFTW.jl](https://github.com/JuliaMath/FFTW.jl) and [HDF5.jl](https://github.com/JuliaIO/HDF5.jl), which wrap the corresponding C libraries.
 The full list of dependencies is listed in the different `Project.toml` files, while the actual version numbers that have been known to work are detailed in `Manifest.toml`.
 As illustrated further below, the Julia package manager allows to easily install the very same versions of the packages listed in the manifest files.
 
@@ -22,7 +30,7 @@ It is possible to take advantage of the availability of multiple shared-memory C
 
 To use this software, it is necessary to install Julia and the Julia packages needed for the software to run.
 Luckily, this is very easy to do thanks to Julia's built-in package manager.
-The installation should typically last less than 15 minutes on a normal desktop computer.
+The installation should typically take less than 15 minutes on a normal desktop computer.
 
 ### 1. Installing Julia
 
@@ -80,6 +88,30 @@ Note that the script is fully commented and may be easily modified.
 
 This will generate a `circulation_NS.h5` file containing the circulation statistics of the field.
 See [Output files](#output-files) below for the typical structure of these files.
+
+#### Plotting the generated data
+
+The generated data may be plotted using the [`examples/plots/circulation.jl`](examples/plots/circulation.jl) script.
+That script provides an example of how to access the generated HDF5 files from Julia.
+
+Similarly to above, here we require an extra set of dependencies, in particular [Makie.jl](https://makie.juliaplots.org/) for the plots.
+As before, these dependencies can be installed by running:
+
+```bash
+julia --project=examples/plots -e "using Pkg; Pkg.instantiate()"
+```
+
+Then, the results may be plotted by running
+
+```bash
+julia --project=examples/plots examples/plots/circulation.jl
+```
+
+Note that these operations may take a while due to Julia's [time to first plot](https://discourse.julialang.org/t/time-to-first-plot-clarification/58534) problem (but things are quickly improving!).
+
+The script will generate a `circulation_NS.svg` file with the figure, which should look like the following:
+
+![Circulation statistics from synthetic velocity field](docs/circulation_NS.svg)
 
 ### 2. Analysing GP (quantum turbulence) data
 
