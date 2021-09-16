@@ -96,6 +96,7 @@ function plot_spectrum(kin, Ein, α)
     α_str = replace(string(α), "//" => "/")
     UP.lineplot!(fig, k, 5 .* k.^(-α); name = "k^{-$α_str}")
     display(fig)
+    println()
     fig
 end
 

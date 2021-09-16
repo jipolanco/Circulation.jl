@@ -63,8 +63,8 @@ function main()
     )
 
     circulation = (
-        # max_slices = typemax(Int),  # compute over all possible 2D cuts of the domain (better)
-        max_slices = 4,  # or compute over a subset of slices (faster)
+        max_slices = typemax(Int),  # compute over all possible 2D cuts of the domain (better)
+        # max_slices = 4,  # or compute over a subset of slices (faster)
         eps_velocity = 0,  # this is for regularisation of GP velocity fields (0 => no regularisation)
 
         # Parameters for circulation moments.

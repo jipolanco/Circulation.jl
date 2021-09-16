@@ -22,7 +22,7 @@ function main()
     dims = (256, 256, 256)
     Ls = (2π, 2π, 2π)
     gp = ParamsGP(dims; L = Ls, c = 1.0, nxi = 1.5)
-    resampling = 4  # resampling factor
+    resampling_factor = 4
 
     # Note: the asterisk is expanded to {Rea,Ima}
     field_names = "sample_data/GP/*Psi.001.dat"
@@ -54,7 +54,7 @@ function main()
 
     println("Reading data from: $field_names\n\n", gp)
 
-    params = (; resampling, field_names)
+    params = (; resampling_factor, field_names)
 
     to = TimerOutput()
     orientations = if orientation === nothing
@@ -118,7 +118,7 @@ function write_params!(ff, gp, params)
     g["c"] = gp.c
     g["kappa"] = gp.κ
     g["xi"] = gp.ξ
-    g["resampling"] = params.resampling
+    g["resampling"] = params.resampling_factor
     g["field_path"] = params.field_names
     ff
 end
@@ -147,7 +147,7 @@ function analyse_orientation(
         to = TimerOutput(),
         max_slices = nothing,
     )
-    resampling = params.resampling
+    resampling = params.resampling_factor
     gp_slice_in = let slice = make_slice(size(gp_in), dir, 1)
         ParamsGP(gp_in, slice)
     end

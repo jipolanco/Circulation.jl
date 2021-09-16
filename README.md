@@ -33,7 +33,7 @@ It is possible to take advantage of the availability of multiple shared-memory C
 
 To use this software, it is necessary to install Julia and the Julia packages needed for the software to run.
 Luckily, this is very easy to do thanks to Julia's built-in package manager.
-The installation should typically take less than 15 minutes on a normal desktop computer.
+The installation should take less than 15 minutes on a normal desktop computer.
 
 ### 1. Installing Julia
 
@@ -62,7 +62,7 @@ To automatically install them, first run
 julia --project=scripts -e "using Pkg; Pkg.instantiate()"
 ```
 
-Note that this will install the packages listed in the `Project.toml` and `Manifest.toml` in the [`scripts/`](scripts/) subdirectory.
+Note that this will install the packages listed in the `Project.toml` and `Manifest.toml` files in the [`scripts/`](scripts/) subdirectory.
 
 Then, run the script as follows:
 
@@ -70,7 +70,7 @@ Then, run the script as follows:
 julia --project=scripts scripts/synthetic.jl
 ```
 
-This will in particular generate binary files `VI{x,y,z}_d.000.dat` on the root directory, containing the three components of the synthetic velocity field.
+This will in particular generate binary files `VI{x,y,z}_d.000.dat` on the root directory, containing the three components of the synthetic velocity field on 64³ grid points.
 Also note that the field can be visualised by opening the generated `synthetic.vti` file in [ParaView](https://www.paraview.org/).
 To analyse the fields, first move them to `sample_data/NS/`:
 
@@ -88,6 +88,8 @@ julia --project examples/circulation_NS.jl
 ```
 
 Note that the script is fully commented and may be easily modified.
+
+On a normal desktop computer, analysing the full 64³ velocity field using 4 threads should take about 1 second.
 
 This will generate a `circulation_NS.h5` file containing the circulation statistics of the field.
 See [Output files](#output-files) below for the typical structure of these files.
@@ -131,6 +133,8 @@ julia --project examples/circulation_GP.jl
 
 Note that the script is fully commented and may be easily modified.
 
+On a normal desktop computer, analysing the full 256³ wave function field using 4 threads with `resampling_factor = 4` (see script) should take about 10 minutes.
+
 This will generate a `circulation_GP.h5` file containing the circulation statistics of the field.
 See [Output files](#output-files) below for the typical structure of these files.
 
@@ -147,6 +151,8 @@ julia --project examples/detect_discrete_vortices_GP.jl
 
 The script will analyse each two-dimensional cut of the 256³ sample field (for a total of `3 * 256 = 768` cuts), and detect vortices on each of these slices.
 Results will be saved to a `vortices.h5` file in the root directory.
+
+On a normal desktop computer, analysing the full 256³ wave function field using 4 threads with `resampling_factor = 4` (see script) should take about 1 minute.
 
 To visualise the detected vortices, a [`vortices_to_vtk.jl`](examples/vortices_to_vtk.jl) script can be used to generate a VTK file, which can be opened in ParaView:
 
