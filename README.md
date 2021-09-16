@@ -8,6 +8,9 @@ Gross-Pitaevskii (GP) data.
 - [System requirements](#system-requirements)
 - [Installation](#installation)
 - [Running the examples](#running-the-examples)
+  1. [Analysing velocity fields (e.g. from NS simulations)](#1-analysing-velocity-fields-eg-from-ns-simulations)
+  2. [Analysing GP (quantum turbulence) data](#2-analysing-gp-quantum-turbulence-data)
+  3. [Detecting discrete vortices from GP data](#3-detecting-discrete-vortices-from-gp-data)
 - [Output files](#output-files)
 - [References](#references)
 
