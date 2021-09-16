@@ -118,6 +118,8 @@ The script will generate a `circulation_NS.svg` file with the figure, which shou
 
 ![Circulation statistics from synthetic velocity field.](docs/circulation_NS.svg)
 
+Note that, on the right, probability distributions are vertically shifted for visualisation purposes.
+
 ### 2. Analysing GP (quantum turbulence) data
 
 First, download the sample data available from [Zenodo](https://doi.org/10.5281/zenodo.5510350), and put the `ReaPsi.001.dat` and `ImaPsi.001.dat` under `sample_data/GP/`.
