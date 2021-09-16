@@ -133,6 +133,28 @@ See [Output files](#output-files) below for the typical structure of these files
 
 Similarly to the Navier-Stokes case, contents of this file may be plotted using the [`examples/plots/circulation.jl`](examples/plots/circulation.jl) script.
 
+### 3. Detecting discrete vortices from GP data
+
+The [`detect_discrete_vortices_GP.jl`](examples/detect_discrete_vortices_GP.jl) script reads the same GP sample data as above, to detect the positions and orientations of discrete vortices:
+
+```bash
+export JULIA_NUM_THREADS=4  # optional, to use threads
+julia --project examples/detect_discrete_vortices_GP.jl
+```
+
+The script will analyse each two-dimensional cut of the 256³ sample field (for a total of `3 * 256 = 768` cuts), and detect vortices on each of these slices.
+Results will be saved to a `vortices.h5` file in the root directory.
+
+To visualise the detected vortices, a [`vortices_to_vtk.jl`](examples/vortices_to_vtk.jl) script can be used to generate a VTK file, which can be opened in ParaView:
+
+```bash
+julia --project examples/vortices_to_vtk.jl
+```
+
+For instance, by opening both the generated `vortices_Z_negative.vtp` and `vortices_Z_positive.vtp` files and using different colours for each dataset, one can obtain a vortex visualisation as in the following image:
+
+![Discrete vortex visualisation.](docs/vortices_GP256_z.png)
+
 ## Output files
 
 Histograms and moments are written to a binary HDF5 file.

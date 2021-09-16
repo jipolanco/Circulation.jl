@@ -1,5 +1,5 @@
-# Detect discrete vortices from GP data via computation of circulation over
-# small loops.
+# Detect discrete vortices from sample 256³ GP data via computation of
+# circulation over small loops.
 
 using GPFields
 
@@ -22,16 +22,14 @@ function main()
     dims = (256, 256, 256)
     Ls = (2π, 2π, 2π)
     gp = ParamsGP(dims; L = Ls, c = 1.0, nxi = 1.5)
-    resampling = 2
+    resampling = 4  # resampling factor
 
     # Note: the asterisk is expanded to {Rea,Ima}
-    field_names = expanduser(
-        "~/Work/data/gGP_samples/tangle/256/fields/*Psi.001.dat"
-    )
+    field_names = "sample_data/GP/*Psi.001.dat"
 
     # Orientation to analyse (if `nothing`, analyse all orientations).
-    # orientation = nothing
-    orientation = 1  # analyse X slices only
+    orientation = nothing
+    # orientation = 1  # analyse X slices only
 
     # Output HDF5 file
     output_h5 = if orientation === nothing
@@ -40,8 +38,9 @@ function main()
         "vortices_dir$orientation.h5"
     end
 
-    # Maximum number of slices to analyse (for testing)
+    # Maximum number of slices to analyse (useful for testing)
     # If `nothing`, all possible slices are considered.
+    # max_slices = 4
     max_slices = nothing
 
     # ============================================================ #
@@ -75,6 +74,8 @@ function main()
     function postprocess(grid, ::Orientation{dir}, slice) where {dir}
         @timeit to "to_coordinates!" to_coordinates!(coords, grid, slice)
     end
+
+    @info "Saving $output_h5"
 
     h5open(output_h5, "w") do ff
         write_params!(ff, gp, params)
