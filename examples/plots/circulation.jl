@@ -44,8 +44,8 @@ function make_plots(ff::HDF5.File)
         ax = Axis(
             gl[1, 1];
             xscale = log10, yscale = log10,
-            # xminorticksvisible = true, xminorticks = IntervalsBetween(9),
-            # yminorticksvisible = true, yminorticks = IntervalsBetween(9),
+            xminorticksvisible = true, xminorticks = IntervalsBetween(9),
+            yminorticksvisible = true, yminorticks = IntervalsBetween(9),
         )
         ax.xlabel = "Loop size r"
         ax.ylabel = "Circulation variance"
@@ -81,7 +81,7 @@ function make_plots(ff::HDF5.File)
         ax = Axis(
             gl[1, 1];
             yscale = log10, xlabel,
-            # yminorticksvisible = true, yminorticks = IntervalsBetween(9),
+            yminorticksvisible = true, yminorticks = IntervalsBetween(9),
         )
         ax.ylabel = "Probability"
 
