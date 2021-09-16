@@ -16,8 +16,8 @@ Gross-Pitaevskii (GP) data.
 
 ## System requirements
 
-This software is known to work on Linux systems.
-In particular, it has run on Fedora 34, Ubuntu 21.04, and RHEL 8.
+This software is known to work on Linux and MacOS systems.
+In particular, it has run on Fedora 34, Ubuntu 21.04, RHEL 8, and MacOS 11.2.3.
 It will likely also work on other operating systems.
 
 The software requires Julia 1.6 or above.
@@ -89,7 +89,7 @@ julia --project examples/circulation_NS.jl
 
 Note that the script is fully commented and may be easily modified.
 
-On a normal desktop computer, analysing the full 64³ velocity field using 4 threads should take about 1 second.
+On a modern desktop computer, analysing the full 64³ velocity field using 4 threads should take less than 1 second.
 
 This will generate a `circulation_NS.h5` file containing the circulation statistics of the field.
 See [Output files](#output-files) below for the typical structure of these files.
@@ -135,7 +135,7 @@ julia --project examples/circulation_GP.jl
 
 Note that the script is fully commented and may be easily modified.
 
-On a normal desktop computer, analysing the full 256³ wave function field using 4 threads with `resampling_factor = 4` (see script) should take about 10 minutes.
+On a modern desktop computer, analysing the full 256³ wave function field using 4 threads with `resampling_factor = 4` (see script) should take less than 5 minutes.
 
 This will generate a `circulation_GP.h5` file containing the circulation statistics of the field.
 See [Output files](#output-files) below for the typical structure of these files.
@@ -158,7 +158,7 @@ julia --project examples/detect_discrete_vortices_GP.jl
 The script will analyse each two-dimensional cut of the 256³ sample field (for a total of `3 * 256 = 768` cuts), and detect vortices on each of these slices.
 Results will be saved to a `vortices.h5` file in the root directory.
 
-On a normal desktop computer, analysing the full 256³ wave function field using 4 threads with `resampling_factor = 4` (see script) should take about 1 minute.
+On a modern desktop computer, analysing the full 256³ wave function field using 4 threads with `resampling_factor = 4` (see script) should take less than 1 minute.
 
 To visualise the detected vortices, a [`vortices_to_vtk.jl`](examples/vortices_to_vtk.jl) script can be used to generate VTK files which can then be opened in ParaView:
 
