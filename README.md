@@ -12,8 +12,8 @@ It will likely also work on other operating systems.
 The software requires Julia 1.6 or above.
 See below for installation details.
 We take advantage of a number of Julia packages.
-The full list of dependencies is listed in the different `Project.toml` files, while the actual version numbers that have been known to work are listed in `Manifest.toml`.
-As detailed below, the Julia package manager allows to easily install the very same versions of the packages listed in the manifest.
+The full list of dependencies is listed in the different `Project.toml` files, while the actual version numbers that have been known to work are detailed in `Manifest.toml`.
+As illustrated further below, the Julia package manager allows to easily install the very same versions of the packages listed in the manifest files.
 
 This software runs on standard CPUs.
 It is possible to take advantage of the availability of multiple shared-memory CPUs for thread-based parallelisation.
@@ -22,7 +22,7 @@ It is possible to take advantage of the availability of multiple shared-memory C
 
 To use this software, it is necessary to install Julia and the Julia packages needed for the software to run.
 Luckily, this is very easy to do thanks to Julia's built-in package manager.
-The installation should typically last about 15 minutes on a normal desktop computer.
+The installation should typically last less than 15 minutes on a normal desktop computer.
 
 ### 1. Installing Julia
 
@@ -51,14 +51,17 @@ To automatically install them, first run
 julia --project=scripts -e "using Pkg; Pkg.instantiate()"
 ```
 
+Note that this will install the packages listed in the `Project.toml` and `Manifest.toml` in the [`scripts/`](scripts/) subdirectory.
+
 Then, run the script as follows:
 
 ```bash
 julia --project=scripts scripts/synthetic.jl
 ```
 
-This will in particular generate binary files `VI*_d.000.dat` on the root directory, containing the three components of the synthetic velocity field.
-To analyse them, move them to `sample_data/NS/`:
+This will in particular generate binary files `VI{x,y,z}_d.000.dat` on the root directory, containing the three components of the synthetic velocity field.
+Also note that the field can be visualised by opening the generated `synthetic.vti` file in [ParaView](https://www.paraview.org/).
+To analyse the fields, first move them to `sample_data/NS/`:
 
 ```bash
 mv -v VI*_d.000.dat sample_data/NS/
@@ -66,6 +69,17 @@ mv -v VI*_d.000.dat sample_data/NS/
 
 #### Computing circulation statistics
 
+To analyse the data, run the [`examples/circulation_NS.jl`](examples/circulation_NS.jl) script as follows, from the root directory of this project:
+
+```bash
+export JULIA_NUM_THREADS=4  # optional, to use threads
+julia --project examples/circulation_NS.jl
+```
+
+Note that the script is fully commented and may be easily modified.
+
+This will generate a `circulation_NS.h5` file containing the circulation statistics of the field.
+See [Output files](#output-files) below for the typical structure of these files.
 
 ### 2. Analysing GP (quantum turbulence) data
 
@@ -83,6 +97,7 @@ julia --project examples/circulation_GP.jl
 Note that the script is fully commented and may be easily modified.
 
 This will generate a `circulation_GP.h5` file containing the circulation statistics of the field.
+See [Output files](#output-files) below for the typical structure of these files.
 
 ## Output files
 
@@ -133,3 +148,15 @@ The structure of the output HDF5 files looks something like the following:
 
 (You can use the command-line utility `h5ls` to see the file structure.)
 
+## References
+
+If you use this software, please cite the following works, where different versions of the software were used.
+
+-  N. P. Müller, J. I. Polanco and G. Krstulovic,
+  *Intermittency of Velocity Circulation in Quantum Turbulence*,
+  [Phys. Rev. X **11**,
+ 011053 (2021)](https://doi.org/10.1103/PhysRevX.11.011053).
+
+ - J. I. Polanco, N. P. Müller and G. Krstulovic,
+   *Vortex clustering, polarisation and circulation intermittency in classical and quantum turbulence*,
+   [arXiv:2107.03335 [physics.flu-dyn] (2021)](https://arxiv.org/abs/2107.03335).
