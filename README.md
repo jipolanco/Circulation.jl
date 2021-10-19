@@ -1,9 +1,9 @@
 # Circulation.jl
 
+[![DOI](https://zenodo.org/badge/406815671.svg)](https://zenodo.org/badge/latestdoi/406815671)
+
 Computation of velocity circulation statistics from Navier-Stokes (NS) and
 Gross-Pitaevskii (GP) data.
-
-[![DOI](https://zenodo.org/badge/406815671.svg)](https://zenodo.org/badge/latestdoi/406815671)
 
 ## Contents
 
