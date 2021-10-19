@@ -1,15 +1,17 @@
-cff-version: 1.1.0
+cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
 authors:
-  - family-names: Polanco
-    given-names: Juan Ignacio
-    orcid: https://orcid.org/0000-0001-7705-753X
-  - family-names: Müller
-    given-names: Nicolás P.
-    orcid: https://orcid.org/0000-0003-2204-7873
-  - family-names: Krstulovic
-    given-names: Giorgio
-    orcid: https://orcid.org/0000-0002-9934-6292
-title: jipolanco/Circulation.jl: v1.0.0
-version: v1.0.0
+- family-names: "Polanco"
+  given-names: "Juan Ignacio"
+  orcid: "https://orcid.org/0000-0001-7705-753X"
+- family-names: "Müller"
+  given-names: "Nicolás P."
+  orcid: "https://orcid.org/0000-0003-2204-7873"
+- family-names: "Krstulovic"
+  given-names: "Giorgio"
+  orcid: "https://orcid.org/0000-0002-9934-6292"
+title: "Circulation.jl: Tools for computing velocity circulation statistics from periodic 3D Navier-Stokes and Gross-Pitaevskii fields"
+doi: 10.5281/zenodo.5578903
+version: v1.0.1
 date-released: 2021-10-19
+url: "https://github.com/jipolanco/Circulation.jl"
