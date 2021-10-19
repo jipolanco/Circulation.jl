@@ -12,6 +12,6 @@ authors:
   orcid: "https://orcid.org/0000-0002-9934-6292"
 title: "Circulation.jl: Tools for computing velocity circulation statistics from periodic 3D Navier-Stokes and Gross-Pitaevskii fields"
 doi: 10.5281/zenodo.5578903
-version: v1.0.1
+version: v1.0.2
 date-released: 2021-10-19
 url: "https://github.com/jipolanco/Circulation.jl"
