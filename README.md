@@ -271,4 +271,4 @@ If you use this software, please cite the following works, where different versi
 
  - J. I. Polanco, N. P. Müller and G. Krstulovic,
    *Vortex clustering, polarisation and circulation intermittency in classical and quantum turbulence*,
-   [arXiv:2107.03335 [physics.flu-dyn] (2021)](https://arxiv.org/abs/2107.03335).
+   [Nat. Commun. **12**, 7090 (2021)](https://doi.org/10.1038/s41467-021-27382-6).
