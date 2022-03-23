@@ -268,6 +268,13 @@ Some possible fields of `data_params`:
 - `load_velocity` (`Bool`): load velocity field instead of wave function field.
   In this case, the density `ρ` will be taken as constant and equal to 1.
 
+Alternatively, when loading a velocity field, one can just pass a
+`basename_velocity` field:
+
+    data_params = (basename_velocity = "sample_data/NS/VI*_d.000.dat",)
+
+where the `*` will be replaced with `{x,y,z}`.
+
 ## Optional parameters
 
 - `eps_vel`: optional correction applied to `ρ` before computing velocity.
@@ -323,7 +330,10 @@ function analyse!(stats::StatsDict, orientation::Orientation, gp::ParamsGP{D},
     with_p = VelocityLikeFields.Momentum in stats_keys
 
     # Allocate arrays.
-    load_velocity = get(data_params, :load_velocity, false) :: Bool
+    load_velocity = get(
+        data_params, :load_velocity,
+        hasproperty(data_params, :basename_velocity),
+    )
     @timeit to "allocate fields" fields = allocate_fields(
         first(values(stats)), Nij_input, Nij_compute, with_v || with_vreg;
         L = Lij, load_velocity,

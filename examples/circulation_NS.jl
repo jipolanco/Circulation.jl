@@ -39,9 +39,7 @@ function main()
     kernels = RectangularKernel.(loop_sizes .* fieldparams.dx[1])
 
     data_params = (
-        directory = "sample_data/NS",  # directory where data is located
-        timestep = 0,          # this corresponds to the "000" in the file names
-        load_velocity = true,  # we're loading synthetic velocity fields
+        basename_velocity = "sample_data/NS/VI*_d.000.dat",
     )
 
     output = (
