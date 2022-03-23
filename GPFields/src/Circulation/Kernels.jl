@@ -128,7 +128,7 @@ function DiscreteFourierKernel{T}(init, ks...; kernel = nothing) where {T}
     Ns = length.(ks)
     mat = Array{T}(init, Ns)
     buf = Vector{T}(undef, 0)
-    WaveNumbers = typeof(first(ks))
+    # WaveNumbers = typeof(first(ks))
     DiscreteFourierKernel(mat, ks, buf, kernel)
 end
 
@@ -176,7 +176,7 @@ function materialise! end
 function materialise!(kf::DiscreteFourierKernel, g::RectangularKernel)
     ks = wavenumbers(kf)
     u = data(kf)
-    Ls = 2π ./ getindex.(ks, 2)  # domain size: L = 2π / k[2]
+    # Ls = 2π ./ getindex.(ks, 2)  # domain size: L = 2π / k[2]
     rs = g.sides
     A = area(g)
 
@@ -184,8 +184,9 @@ function materialise!(kf::DiscreteFourierKernel, g::RectangularKernel)
     sincs, offsets = _eval_sincs!(kf.buf, ks, rs)
 
     @inbounds for I in CartesianIndices(u)
-        sxy = getindex.(Ref(sincs), Tuple(I) .+ offsets)
-        u[I] = A * prod(sxy)
+        inds = Tuple(I) .+ offsets
+        p = prod(i -> sincs[i], inds)
+        u[I] = A * p
     end
 
     DiscreteFourierKernel(kf, g)
@@ -217,7 +218,7 @@ end
 function materialise!(kf::DiscreteFourierKernel, g::EllipsoidalKernel)
     ks = wavenumbers(kf)
     u = data(kf)
-    Ls = 2π ./ getindex.(ks, 2)  # domain size: L = 2π / k[2]
+    # Ls = 2π ./ getindex.(ks, 2)  # domain size: L = 2π / k[2]
     rs = g.diameters
     Rs = rs ./ 2π
     A = area(g)
