@@ -228,7 +228,7 @@ function generate_grid_slice!(grid, F, to)
     method = Grids.BestInteger()
     @timeit to "to_grid!" to_grid!(
         grid, Γ, method;
-        κ = gp.κ, force_unity = true, cleanup = true, cell_size = (2, 2),
+        κ = gp.phys.κ, force_unity = true, cleanup = true, cell_size = (2, 2),
     )
 
     nothing
