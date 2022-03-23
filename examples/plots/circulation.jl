@@ -22,10 +22,12 @@ end
 make_plots(filename) = h5open(make_plots, filename, "r")
 
 function make_plots(ff::HDF5.File)
-    # Heuristically decide whether we're plotting data from GP simulations
-    # according to whether a RegVelocity group exists.
-    is_GP = haskey(ff, "/Circulation/RegVelocity")
-    κ = read(ff["/ParamsGP/kappa"]) :: Float64
+    # Check whether we're plotting data from GP simulations according to whether
+    # "/ParamsGP/kappa" exists.
+    is_GP = haskey(ff, "/ParamsGP/kappa")
+    if is_GP
+        κ = read(ff["/ParamsGP/kappa"]) :: Float64
+    end
 
     g_base = open_group(ff, "/Circulation/Velocity")
     g_moments = open_group(g_base, "Moments")
@@ -108,7 +110,7 @@ function make_plots(ff::HDF5.File)
             Γ_norm = is_GP ? κ : sqrt(Γ_var[j])
             xs .= bin_centres ./ Γ_norm
             n = nsamples[j]
-            
+
             for i ∈ eachindex(pdf)
                 dx = (bin_edges[i + 1] - bin_edges[i]) / Γ_norm
                 pdf[i] = hists[i, j] / (n * dx) * yshift

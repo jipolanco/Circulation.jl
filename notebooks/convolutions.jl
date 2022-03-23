@@ -320,7 +320,7 @@ end;
 	Γ = Matrix{Float64}(undef, Ns)
 	print("Using convolution...    ")
 	@time circulation!(Γ, vF, gF; buf = Γhat, plan_inv)
-	Γ ./= gp.κ
+	Γ ./= gp.phys.κ
 end;
 
 # ╔═╡ c23d43da-1e77-11eb-10b2-5553330282c3
@@ -398,7 +398,7 @@ end
 		prepare!(vint, vs)
 		circulation!(Γ, vint, rs; grid_step)
 	end
-	Γ ./= gp.κ
+	Γ ./= gp.phys.κ
 end;
 
 # ╔═╡ 03a544c0-103c-11eb-2e30-1d6e829715c1

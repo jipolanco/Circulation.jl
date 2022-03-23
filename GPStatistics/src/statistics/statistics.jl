@@ -461,7 +461,10 @@ function load_psi_slice!(ψ::AbstractArray, ψ_in::AbstractArray, gp, slice,
     gp_slice = ParamsGP(gp_slice_in, dims=size(ψ))
 
     # Note that nξ changes in the resampled field!
-    @assert gp_slice.nξ == gp_slice_in.nξ * resampling_factor
+    let a = gp_slice.phys, b = gp_slice_in.phys
+        @assert a !== nothing && b !== nothing
+        @assert a.nξ == b.nξ * resampling_factor
+    end
 
     @timeit to "resample ψ" begin
         # Note: resample_field_fourier! works with fields in Fourier space.

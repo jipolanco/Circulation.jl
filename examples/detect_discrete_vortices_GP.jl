@@ -115,9 +115,12 @@ function write_params!(ff, gp, params)
     g["resolution"] = collect(size(gp))
     g["box_size"] = collect(box_size(gp))
     g["dx"] = collect(gp.dx)
-    g["c"] = gp.c
-    g["kappa"] = gp.κ
-    g["xi"] = gp.ξ
+    let p = gp.phys
+        @assert p !== nothing
+        g["c"] = p.c
+        g["kappa"] = p.κ
+        g["xi"] = p.ξ
+    end
     g["resampling"] = params.resampling_factor
     g["field_path"] = params.field_names
     ff

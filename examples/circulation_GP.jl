@@ -116,7 +116,7 @@ function main()
 
     stats = let par = circulation
         Nedges = par.histogram.Nedges
-        κ = gp.κ
+        κ = gp.phys.κ
         M = par.histogram.max_kappa
         edges = LinRange(-M * κ, M * κ, Nedges)
         histogram = ParamsHistogram(CirculationField(), bin_edges = edges)

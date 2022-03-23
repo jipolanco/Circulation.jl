@@ -33,7 +33,10 @@ function momentum!(
     ks = get_wavenumbers(gp)  # (kx, ky, ...)
     @assert length.(ks) === size(ψ)
 
-    α = 2 * gp.c * gp.ξ / sqrt(2)
+    α = let p = gp.phys
+        @assert p !== nothing
+        2 * p.c * p.ξ / sqrt(2)
+    end
 
     # Loop over momentum components.
     for (n, pj) in enumerate(p)

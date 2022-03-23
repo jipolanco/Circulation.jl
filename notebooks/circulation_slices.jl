@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.16.0
+# v0.16.1
 
 using Markdown
 using InteractiveUtils
@@ -149,7 +149,7 @@ plot_colourmap(make_transparent_cmap(plt.cm.RdBu))
 md"# Setup"
 
 # ╔═╡ 35ae4ae0-04b9-11eb-26c3-6b7a66da4acd
-resampling = 1
+resampling = 4
 
 # ╔═╡ 6531fd6e-0fab-11eb-063c-895e7d5ae867
 from_convolution = true  # true -> testing!!
@@ -182,7 +182,7 @@ begin
 function load_psi_tangle(::Val{256}, resampling)
 	filenames = expanduser("~/Work/Data/GP/gGP_samples/tangle/256/fields/*Psi.001.dat")
 	gp_in = ParamsGP((256, 256, 256); L = (2π, 2π, 2π), c = 1.0, nxi = 1.5)
-	slice = (:, :, 3)
+	slice = (:, 30, :)
 	gp = ParamsGP(gp_in, slice)
 	load_psi(gp_in, filenames; slice, resampling)
 end
@@ -216,7 +216,7 @@ vint = IntegralField2D(fields.vs, L = gp.L);
 # ╔═╡ 304081f6-04c1-11eb-1533-a3699c44cdd2
 # Compute circulation on cells of circulation grid
 Γ = if from_convolution
-	let r = 2π / 16
+	let r = 2π / 64
 		Ns = size(gp)
 		Γ = Array{Float64}(undef, Ns...)
 		vs = fields.vs
@@ -226,14 +226,14 @@ vint = IntegralField2D(fields.vs, L = gp.L);
 		gF = DiscreteFourierKernel{Float64}(undef, ks...)
 		materialise!(gF, kernel)
 		circulation!(Γ, vF, gF)
-		Γ ./= gp.κ
+		Γ ./= gp.phys.κ
 	end
 else
 	let r = grid_step
 		Ns = size(gp) .÷ grid_step
 		Γ = Array{Float64}(undef, Ns...)
 		circulation!(Γ, vint, (r, r); grid_step, centre_cells=false)
-		Γ ./= gp.κ
+		Γ ./= gp.phys.κ
 		# circulation_filter!(Γ)
 		Γ
 	end

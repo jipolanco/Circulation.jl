@@ -27,18 +27,16 @@ function main()
 
     dims = (64, 64, 64)  # resolution of input fields
 
-    gp = ParamsGP(
+    fieldparams = ParamsGP(
         dims,
         L = (2π, 2π, 2π),  # domain size
-        c = 1,             # (irrelevant for NS)
-        nxi = 1,           # (irrelevant for NS)
     )
 
     # Sizes of square loops to analyse
     loop_sizes = make_loop_sizes(; base = 1.4, dims = dims)
 
     # Generate convolution kernels associated to square loops
-    kernels = RectangularKernel.(loop_sizes .* gp.dx[1])
+    kernels = RectangularKernel.(loop_sizes .* fieldparams.dx[1])
 
     data_params = (
         directory = "sample_data/NS",  # directory where data is located
@@ -75,29 +73,14 @@ function main()
     @info "Loop sizes: $loop_sizes ($(length(loop_sizes)) sizes)"
 
     to = TimerOutput()
-    kwargs = (
-        to = to,
-    )
+    kwargs = (to = to,)
 
     # Which fields to analyse.
-    which = if data_params.load_velocity
-        # If a velocity field is loaded (NS):
-        (
-            VelocityLikeFields.Velocity,
-        )
-    else
-        # If a wave function field is loaded (GP), we compute circulation from
-        # velocity v and from regularised velocity v * √ρ.
-        (
-            VelocityLikeFields.Velocity,
-            VelocityLikeFields.RegVelocity,
-            # VelocityLikeFields.Momentum,
-        )
-    end
+    which = (VelocityLikeFields.Velocity,)
 
     stats = let par = circulation
         Nedges = par.histogram.Nedges
-        κ = gp.κ
+        κ = 1.0  # circulation unit (arbitrary for NS...)
         M = par.histogram.max_kappa
         edges = LinRange(-M * κ, M * κ, Nedges)
         histogram = ParamsHistogram(CirculationField(), bin_edges = edges)
@@ -116,13 +99,13 @@ function main()
     end
 
     # This is just to precompile functions and get better timings.
-    analyse!(stats, gp, data_params; max_slices=1, kwargs...)
+    analyse!(stats, fieldparams, data_params; max_slices=1, kwargs...)
     reset_timer!(to)
     reset!(stats)
 
     # The actual analysis is done here.
     analyse!(
-        stats, gp, data_params;
+        stats, fieldparams, data_params;
         max_slices = circulation.max_slices,
         kwargs...,
     )
@@ -134,7 +117,7 @@ function main()
         mkpath(dirname(outfile))
         @info "Saving $(outfile)"
         h5open(outfile, "w") do ff
-            write(create_group(ff, "ParamsGP"), gp)
+            write(create_group(ff, "ParamsGP"), fieldparams)
             write(create_group(ff, "Circulation"), stats)
         end
     end
