@@ -9,3 +9,8 @@ GPFields = "1ff924b9-96ae-4c53-b8fa-3ca72644558a"
 HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 TimerOutputs = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
+
+[compat]
+FFTW = "1"
+HDF5 = "0.16"
+TimerOutputs = "0.5"
